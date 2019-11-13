@@ -1,0 +1,60 @@
+{	
+
+	"Welcome":"Hi {customer_name}, thanks for add me!, you may type !help for instructions :)"
+	
+,	"play":"> {have_sets} sets - {rate} TF2"
+
+,	"Thanks":"Thanks for using our Level UP service!, may you leave a +Rep on my profile? <3 <3"
+
+,	"Check":"I currently have {have_sets} set(s) which you haven't crafted!!{breakline}To buy all of them it'll cost {tf_price} TF2 Key(s)"
+,	"Check_i":"Interested? xD, type !buy {buytf_qty}"
+
+,	"SellCheck":"You currently have {amount} sets which i can buy =D, i can pay up to {tfkeys_amount} tf keys for {tfsets_amount} sets"
+,	"SellCheck_i":"Interested? hehe, type !sell {sell_qty}"
+
+,	"Level":"You'll need {needed} sets to reach level {desired_level}, and it'll cost {price_tf} tf2 keys"
+,	"Level2":"Type !prices to see our prices!"
+
+,	"Sell_keys":"May you wanna buy some keys? Type !sellcheck !"
+
+,	"Donthave":"Unfortunately i don't have any set which you haven't crafted yet :c"
+,	"ThemDonthave":"Unfortunately you don't have any sets which i can request :c, please come back later ..?"
+
+,	"i_need":"Unfortunately i only have {currency_qty} {currency} available for you, and i need {needed} for this request :c"
+,	"them_need":"Unfortunately you only have {currency_qty} {currency} available to trade, and you need {needed} for this request :c"
+
+,	"Sorryme":"Sorry, but i only have {currency_qty} tf keys on my inventory, may you try {command} {command_qty} ?"
+,	"Sorryme2":"Sorry, but i don't have any tf keys on my inventory :/"
+
+,	"Sorrythem":"Sorry, but you only have {currency_qty} tf keys on your inventory, may you try {command} {command_qty} ?"
+,	"Sorrythem2":"Sorry, but you don't have any tf keys on your inventory :/"
+
+,	"Inventory_error":"There was an error in load your inventory, please try again :)"
+,	"Inventory_priv":"Your profile is private :({breakline}Please make it public for me ? <3 <3"
+
+,	"Loading":"Hey bro, i'm currently loading my inventory xD"
+	
+,	"Badge_error":"An error occurred while loading your badges. ;-; Please try again ? <3"
+,	"General_error":"Something wrong has happened :c, please try again ? "
+
+,	"SpamWarn1":"Please don't spam me :("
+,	"SpamWarn2":"Why you hate me ? :( :("
+,	"SpamWarn3":"You're sending to much messages to me, i'll unfriend you, bye :("
+	
+,	"Trade_error":"An error occurred while sending your trade, can you please try again? thanks <3 <3"
+,	"Trade_error1":"You're unavailable to trade, please try again later :)"
+,	"Trade_error2":"I have sent too many trade offers, or have too many outstanding trade offers with you. {breakline}Can you please cancel some before next request? ty <3"
+,	"Trade_hold":"Sorry bro, but i'm not allowed to accept trade hold :c"
+
+,	"OwnerRequest":"https://justazul.xyz"
+,	"CustomerRequest":"Proccessing your request.."
+
+,	"SendingOffer":"Sending trade offer yey"
+
+,	"OfferSent":"Trade offer sent =D =D"
+,	"OfferSent2":"quick link for u ^^: {url}"
+
+,	"Unknow":"Unknow command!, Type !help for more information."
+,	"UnknowAdmin":"Unknow command!, Type !help or !admin for more information."
+
+}

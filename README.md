@@ -49,7 +49,6 @@ Starter/Free version of my Cardsets/LevelUp bot; really basic and NOT RECOMMENDE
 - !block [SteamID64] - block user
 - !unblock [SteamID64] - unblock user
 
-- !stock - bot will send a trade offer requesting all your available sets to trade
 - !profit - show bot buys and sells
 
 - !restart - restart the bot(logoff and login)

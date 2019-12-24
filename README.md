@@ -4,6 +4,13 @@ Free version of my Cardsets/LevelUp bot; really basic and NOT RECOMMENDED for th
 * This script works with TF2 Keys only !
 
 If you're grateful for what i'm doing, please consider donating. Even $1 is highly appreciated and shows that you care. Thank you!
+<p>
+<a href="https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=ZGFRUQCHW3Y4S&source=url" rel="nofollow"><img src="https://img.shields.io/badge/Paypal-donate-yellow" alt="Paypal donate" data-canonical-src="https://img.shields.io/badge/Paypal-donate-yellow" style="max-width:100%;"></a>
+<a href="https://ko-fi.com/justazul" rel="nofollow"><img src="https://img.shields.io/badge/Ko--fi-donate-yellow" alt="Ko-fi donate" data-canonical-src="https://img.shields.io/badge/Ko--fi-donate-yellow" style="max-width:100%;"></a>
+<a href="https://blockstream.info/address/39GQuXS1jHFWJ7daFRhz6oEcXngzvj1jiG" rel="nofollow"><img src="https://img.shields.io/badge/Bitcoin-donate-yellow" alt="Bitcoin donate" data-canonical-src="https://img.shields.io/badge/Bitcoin-donate-yellow" style="max-width:100%;"></a>
+<a href="https://steamcommunity.com/tradeoffer/new/?partner=217734041&token=8O2Nj7Jv" rel="nofollow"><img src="https://img.shields.io/badge/Steam-donate-yellow" alt="Steam donate" data-canonical-src="https://img.shields.io/badge/Steam-donate-yellow" style="max-width:100%;"></a>
+</p>
+
 ## Features:
 
 ### Trade Tracking 

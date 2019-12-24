@@ -1,5 +1,7 @@
 # BluebotFree
-Starter/Free version of my Cardsets/LevelUp bot; really basic and NOT RECOMMENDED for those who already owns that sort of service.
+Free version of my Cardsets/LevelUp bot; really basic and NOT RECOMMENDED for those who already owns that sort of service.
+
+If you're grateful for what i'm doing, please consider donating. Even $1 is highly appreciated and shows that you care. Thank you!
 
 * This script works with TF2 Keys only !
 ## Features:

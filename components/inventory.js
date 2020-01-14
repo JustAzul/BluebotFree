@@ -324,17 +324,17 @@ Inventory.prototype.getAvailableSetsForCustomer = function (target, compare, mod
 			if (err) callback(err); 
 			else {
 				let toSend = [],
-					falta = () => max - toSend.length;
+					need = () => max - toSend.length;
 
 				for (let appid in self.AvailableSets) {
 					let available_qty = 0;
 					available_qty += Math.min(...[self.AvailableSets[appid].length, (badge[appid] != null ? badge[appid] : mode)]);
 
-					if (available_qty && falta()) {
+					if (available_qty && need()) {
 						for (let i = 0; i < available_qty; i++) {
-							if (falta()) {
+							if (need()) {
 								toSend.push(self.AvailableSets[appid][i]);
-								if (!falta()) {
+								if (!need()) {
 									break;
 								}
 							}
@@ -346,16 +346,16 @@ Inventory.prototype.getAvailableSetsForCustomer = function (target, compare, mod
 		});
 	} else {
 		let toSend = [],
-			falta = () => max - toSend.length;
+			need = () => max - toSend.length;
 
 		for (let appid in self.AvailableSets) {
 			let available_qty = Math.min(...[self.AvailableSets[appid].length, 5]);
 
-			if (available_qty && falta()) {
+			if (available_qty && need()) {
 				for (let i = 0; i < available_qty; i++) {
-					if (falta()) {
+					if (need()) {
 						toSend.push(self.AvailableSets[appid][i]);
-						if (!falta()) {
+						if (!need()) {
 							break;
 						}
 					}

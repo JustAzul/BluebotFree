@@ -95,11 +95,11 @@ async function LoadLocalCardDatabase(){
 async function UpdateProfit(SellInfoType, SellInfoCurrency, _sets, _currency) {
 	switch (SellInfoType) {
 		case 0:
-			//selled
+			//sold
 			if (SellInfoCurrency == "tf key(s)") UpdateProfits(0, 0, _sets, _currency);
 			break;
 		case 1:
-			//buyed
+			//bought
 			if (SellInfoCurrency == "tf key(s)") UpdateProfits(_sets, _currency);
 			break;
 	}

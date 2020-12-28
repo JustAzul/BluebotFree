@@ -1,7 +1,7 @@
 const fs = require('graceful-fs');
 const moment = require('moment');
 const SteamTotp = require('steam-totp');
-const BadgeScanner = require('../components/BadgeScanner.js');
+const RequestDatabase = require('../components/RequestDatabase.js');
 const {EOL} = require('os');
 const {Log, storeFile, readJSON} = require('azul-tools');
 const {DebugLogs, sharedse, username, password} = require('../config/main.js')
@@ -58,14 +58,14 @@ async function Init(){
 	}, moment.duration(25, 'hours'));
 }
 
-function UpdateDatabase() {
+async function UpdateDatabase() {
+	const FreshDatabase = await RequestDatabase();
+
 	return new Promise(resolve => {
-		BadgeScanner.scan((database, totalApps) => {
-			storeData("database.json", database, true).then(() => {
-				Log.Debug(`Database up to date!, Found ${totalApps} apps with cards!`, false, DebugLogs);
-				resolve();
-			})
-		});
+		storeData("database.json", FreshDatabase, true).then(() => {
+			Log.Debug(`Database up to date!, Found ${Object.keys(FreshDatabase).length} apps with cards!`, false, DebugLogs);
+			resolve();
+		})
 	});
 }
 

@@ -15,6 +15,13 @@ module.exports = {
 
 ,	"admin": ["STEAM_ID64", "STEAM_ID64"]		//Desired admins id 64, one value per quote, splited by comma, example [ "value1", "value2" ]
 
+	//Steam.supply support to setup your bot in cardbot catalog list!
+	,	"SteamSupply": {
+		"Api": "",
+		"EnableDB": true,
+		"Enabled": false
+	}
+
 ,	"ThanksM": "+Rep!, Please visit https://github.com/JustAzul/BluebotFree <-|-> https://justazul.xyz!"	//Desired comment you want the bot to make in customers profile, change to "null" witout quotes to disable this feature
 ,	"changeBotName": "justazul.xyz Free LevelUP #Bot {rate}"				//If you want to change bot name on startups, set the value name here, change to "null" witout quotes to disable this feature
 

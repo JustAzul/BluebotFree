@@ -13,7 +13,7 @@ const
 
 require('events').EventEmitter.defaultMaxListeners = 0;
 
-const {	Log, storeChatData, formatNumber} = require('azul-tools');
+const {	Log, storeChatData, formatNumber } = require('azul-tools');
 
 let client = new SteamUser(),
 	didLogin = false,
@@ -22,7 +22,7 @@ let client = new SteamUser(),
 		"steam": client,
 		"language": "en",
 		"community": community,
-		"pollInterval": moment.duration(30, 'seconds'),
+		"pollInterval": moment.duration(20, 'seconds'),
 		"cancelTime": moment.duration(2, 'hours'),
 		"savePollData": true
 	}),
@@ -69,12 +69,14 @@ client.once('accountLimitations', (limited, communityBanned, locked) => {
 	}
 });
 
+client.once('loggedOn', () => {
+	if (config.changeBotName) client.setPersona(SteamUser.EPersonaState.Online, config.changeBotName.replace("{csgo_rate}", `${tfkeySets}:1`));
+	if (config.SteamSupply.Enabled) inventory.startCatalogLoop();
+});
+
 client.on('loggedOn', () => {
 	didLogin = true;
-
-	if (config.changeBotName) client.setPersona(SteamUser.EPersonaState.Online, config.changeBotName.replace("{csgo_rate}", `${tfkeySets}:1`));
-	else client.setPersona(SteamUser.EPersonaState.Online);
-
+	client.setPersona(SteamUser.EPersonaState.Online);
 	Log("Conecting to SteamCommunity..");
 });
 

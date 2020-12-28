@@ -2,8 +2,9 @@ const SteamUser = require('steam-user');
 const config = require('../config/main.js');
 const async = require('async');
 const moment = require('moment');
-const {Log, formatNumber} = require('azul-tools');
+const {Log, formatNumber, sleep} = require('azul-tools');
 const helper = require('./helpers.js');
+const _SteamSupply = require('./SteamSupply.js');
 
 module.exports = Inventory;
 
@@ -18,6 +19,20 @@ function Inventory(community, client) {
 	this.CurrentKeys = [];
 	this.AvailableSets = {};
 };
+
+Inventory.prototype.startCatalogLoop = function () {
+	Log.Debug(`Starting Steam.supply catalog..`, false, config.DebugLogs);
+    return this.CatalogLoop();
+}
+
+Inventory.prototype.CatalogLoop = function () {
+	await sleep(moment.duration(15, 'minutes'));
+	
+	const KeysAmount = this.HaveKeys();
+	await _SteamSupply(KeysAmount);
+	
+    this.CatalogLoop();
+}
 
 Inventory.prototype.haveSets = function () {
 	return Object.values(this.AvailableSets).reduce((prevVal, set) => {
@@ -116,6 +131,12 @@ Inventory.prototype.loadTF2Inventory = function (callback) {
 			if (callback) callback(err);
 		} else {
 			this.CurrentKeys = keys;
+
+			if(config.SteamSupply.Enabled) {
+				const KeysAmount = this.HaveKeys();
+				_SteamSupply(KeysAmount);
+			}
+
 			Log(`Found ${keys.length} TF Keys!`);
 			if (callback) callback();
 		}

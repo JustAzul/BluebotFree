@@ -15,5 +15,9 @@
 		"steam-tradeoffer-manager": "^2.9.1",
 		"steam-user": "^4.9.1",
 		"steamcommunity": "^3.36.1"
+	},
+	"scripts": {
+		"start": "node --max-old-space-size=4096 blue.js",
+		"debug": "node --max-old-space-size=4096 --expose-gc --inspect=9222 blue.js"
 	}
 }

@@ -6,7 +6,6 @@
 	"author": "Azul|https://justazul.xyz",
 	"dependencies": {
 		"@doctormckay/stdlib": "^1.10.1",
-		"async": "^2.6.0",
 		"azul-tools": "^1.2.2",
 		"dotenv": "^8.0.0",
 		"graceful-fs": "^4.1.15",

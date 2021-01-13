@@ -1,3 +1,4 @@
+const SteamUser = require('steam-user');
 const config = require('../config/main.js');
 const fs = require('graceful-fs');
 const moment = require('moment');
@@ -49,7 +50,7 @@ async function Init() {
 async function checkUsers() {
 	for (let UserID64 in client.myFriends) {
 
-		if (client.myFriends[UserID64] != 3) continue; //user is not a friend type
+		if (client.myFriends[UserID64] != SteamUser.EFriendRelationship.Friend) continue; //user is not a friend type
 		if (config.admin.indexOf(UserID64) > -1) continue; //user is an admin
 
 		if (!User.LastInteraction[UserID64]) { //somehow user doesn't not have an interact data

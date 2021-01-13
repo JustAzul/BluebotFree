@@ -3,7 +3,7 @@ const moment = require('moment');
 const SteamTotp = require('steam-totp');
 const RequestDatabase = require('../components/RequestDatabase.js');
 const {EOL} = require('os');
-const {Log, storeFile, readJSON} = require('azul-tools');
+const {Log, storeFile, readJSON, formatNumber} = require('azul-tools');
 const {DebugLogs, sharedse, username, password} = require('../config/main.js')
 const StdLib = require('@doctormckay/stdlib');
 
@@ -89,7 +89,7 @@ function newTradeOfferFinished(OfferID){
 async function LoadLocalCardDatabase(){
 	CardDatabase = await readJSON("data/database.json");
 	if(Object.keys(CardDatabase).length == 0) return UpdateDatabase();
-	Log.Debug(`Successfuly loaded ${Object.keys(CardDatabase).length} apps!`, false, DebugLogs);
+	Log.Debug(`Successfuly loaded ${formatNumber(Object.keys(CardDatabase).length)} apps!`, false, DebugLogs);
 }
 
 async function UpdateProfit(SellInfoType, SellInfoCurrency, _sets, _currency) {

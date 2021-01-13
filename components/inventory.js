@@ -1,6 +1,5 @@
 const SteamUser = require('steam-user');
 const config = require('../config/main.js');
-const async = require('async');
 const moment = require('moment');
 const {Log, formatNumber, sleep} = require('azul-tools');
 const helper = require('./helpers.js');
@@ -25,7 +24,7 @@ Inventory.prototype.startCatalogLoop = function () {
     return this.CatalogLoop();
 }
 
-Inventory.prototype.CatalogLoop = function () {
+Inventory.prototype.CatalogLoop = async function () {
 	await sleep(moment.duration(15, 'minutes'));
 	
 	const KeysAmount = this.HaveKeys();
@@ -44,59 +43,56 @@ Inventory.prototype.HaveKeys = function () {
 	return this.CurrentKeys.length;
 }
 
-Inventory.prototype.isInventoryloaded = function (callback) {
-	callback(Object.keys(this.AvailableSets).length + this.HaveKeys());
+Inventory.prototype.isInventoryloaded = async function () {
+	return Object.keys(this.AvailableSets).length + this.HaveKeys();
 }
 
-Inventory.prototype.Load = function (force, callback) {
+Inventory.prototype.Load = async function (force = false) {
 	const startedTime = helper.Now();
-	this.isInventoryloaded(isInvLoaded => {
-		if (!isInvLoaded || force) {
-			Log("Loading Bot Inventory..");
-			this.loading++;
-			this.client.setPersona(SteamUser.EPersonaState.Busy);
+	
+	const isInvLoaded = await this.isInventoryloaded();
+	if (isInvLoaded || !force) return false;
 
-			const LoadInventories = {
-				"TF2": callback => {
-					this.loadTF2Inventory(err => {
-						if (err) {
-							if (err.message.toLowerCase().indexOf("failure") == -1) {
-								return setTimeout(() => {
-									LoadInventories["TF2"](callback);
-								}, moment.duration(5, 'seconds'));
-							}
+	Log("Loading Bot Inventory..");
+	this.loading++;
+	this.client.setPersona(SteamUser.EPersonaState.Busy);
 
-							throw Error("This account doesn't have a TF2 Inventory");
-						}
+	const Load_TF2 = new Promise((resolve, reject) => {
+		this.loadTF2Inventory(err => {
+			if (err) {
 
-						callback(null, true);
-					});
-				},
-				"SteamInventory": callback => {
-					this.loadInventory(err => {
-						if (err) {
-							Log.Error(err.message);
-							return setTimeout(() => {
-								LoadInventories["SteamInventory"](callback);
-							}, moment.duration(5, 'seconds'));
-						}
-						callback(null, true)
-					});
+				if (err.message.toLowerCase().indexOf("failure") == -1) {					
+					setTimeout(() => {
+						resolve(Load_TF2);
+					}, moment.duration(5, 'seconds'));
+					return;
 				}
+
+				reject(new Error("This account doesn't have a TF2 Inventory"));
 			}
 
-			async.parallel(LoadInventories, () => {
-				this.loading--;
-				Log.Debug(`Inventory loaded in ${moment().diff(startedTime, 'seconds', true)} seconds!`, false, config.DebugLogs);
-				if (callback) callback(true);
-			})
-
-		} else if (callback) callback(0);
+			resolve();
+		});
 	});
+
+	const Load_Steam = new Promise((resolve, reject) => {
+		this.loadInventory(err => {
+			if (err) {
+				setTimeout(() => {
+					resolve(Load_Steam);
+				}, moment.duration(5, 'seconds'));
+				return;
+			}
+			resolve();
+		});
+	});
+
+	await Promise.all([Load_TF2, Load_Steam]);	
+	this.loading--;
+	Log.Debug(`Inventory loaded in ${moment().diff(startedTime, 'seconds', true)} seconds!`, false, config.DebugLogs);
 }
 
 Inventory.prototype.loadInventory = function (callback) {
-	let self = this;
 	this.getUserInventoryContents(this.client.steamID, 753, 6, true, (err, items) => {
 		if (err) {
 			if (callback) callback(err);
@@ -117,7 +113,7 @@ Inventory.prototype.loadInventory = function (callback) {
 			const loginfo = `Found ${formatNumber(cards.length)} cards on inventory!`;
 			Log(loginfo);
 
-			self.UpdateSets(InventoryCardsGame, sets => {
+			this.UpdateSets(InventoryCardsGame, sets => {
 				Log(`Found ${formatNumber(sets)} card sets !`);
 				if (callback) callback();
 			});
@@ -125,7 +121,7 @@ Inventory.prototype.loadInventory = function (callback) {
 	});
 }
 
-Inventory.prototype.loadTF2Inventory = function (callback) {
+Inventory.prototype.loadTF2Inventory = function () {
 	this.return_CustomerTFKeys(this.client.steamID, (err, keys) => {
 		if (err) {
 			if (callback) callback(err);
@@ -153,18 +149,18 @@ Inventory.prototype.return_CustomerTFKeys = function (sid64, callback) {
 }
 
 Inventory.prototype.checkGamesSetInfo = function (InventoryCardsGame, appIds, callback) {
-	let self = this;
 	if (!appIds.length) return callback();
 
-	self.AvailableSets = {};
-	let checked = 0,
-		done = () => {
-			checked++;
-			if (checked == appIds.length) callback();
-		};
+	this.AvailableSets = {};
+	let checked = 0;
+
+	const done = () => {
+		checked++;
+		if (checked == appIds.length) callback();
+	};
 
 	appIds.forEach(appId => {
-		self.checkGameSet(InventoryCardsGame, appId, () => {
+		this.checkGameSet(InventoryCardsGame, appId, () => {
 			done();
 		});
 	});
@@ -339,22 +335,21 @@ Inventory.prototype.getUserBadges = function (target, compare, mode, callback) {
 }
 
 Inventory.prototype.getAvailableSetsForCustomer = function (target, compare, mode, max, callback) {
-	let self = this;
 	if (compare) {
-		self.getUserBadges(target, compare, mode, (err, badge) => {
+		this.getUserBadges(target, compare, mode, (err, badge) => {
 			if (err) callback(err); 
 			else {
 				let toSend = [],
 					need = () => max - toSend.length;
 
-				for (let appid in self.AvailableSets) {
+				for (let appid in this.AvailableSets) {
 					let available_qty = 0;
-					available_qty += Math.min(...[self.AvailableSets[appid].length, (badge[appid] != null ? badge[appid] : mode)]);
+					available_qty += Math.min(...[this.AvailableSets[appid].length, (badge[appid] != null ? badge[appid] : mode)]);
 
 					if (available_qty && need()) {
 						for (let i = 0; i < available_qty; i++) {
 							if (need()) {
-								toSend.push(self.AvailableSets[appid][i]);
+								toSend.push(this.AvailableSets[appid][i]);
 								if (!need()) {
 									break;
 								}
@@ -369,13 +364,13 @@ Inventory.prototype.getAvailableSetsForCustomer = function (target, compare, mod
 		let toSend = [],
 			need = () => max - toSend.length;
 
-		for (let appid in self.AvailableSets) {
-			let available_qty = Math.min(...[self.AvailableSets[appid].length, 5]);
+		for (let appid in this.AvailableSets) {
+			let available_qty = Math.min(...[this.AvailableSets[appid].length, 5]);
 
 			if (available_qty && need()) {
 				for (let i = 0; i < available_qty; i++) {
 					if (need()) {
-						toSend.push(self.AvailableSets[appid][i]);
+						toSend.push(this.AvailableSets[appid][i]);
 						if (!need()) {
 							break;
 						}

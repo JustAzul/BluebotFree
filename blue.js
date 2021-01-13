@@ -102,7 +102,7 @@ function loadmanager(newCookie) {
 		inventory.apiKey = manager.apiKey;
 		community.startConfirmationChecker(20000, config.identity);
 
-		inventory.Load(false, () => online());
+		inventory.Load().then(() => online());
 
 		clearInterval(timeouts['CheckL_i']);
 		timeouts['CheckL_i'] = setInterval(checkSteamLogged, moment.duration(10, "minutes"));
@@ -173,7 +173,7 @@ community.on('confirmationAccepted', conf => {
 
 function checkFriendRequests() {
 	for (let user in client.myFriends) {
-		if (client.myFriends[user] == 2) addFriend(user);
+		if (client.myFriends[user] === SteamUser.EFriendRelationship.RequestRecipient) addFriend(user);
 	}
 }
 
@@ -327,7 +327,7 @@ manager.on('receivedOfferChanged', offer => {
 
 		if (!isDupe) {
 			helper.newTradeOfferFinished(offer.id);
-			inventory.Load(true, () => {
+			inventory.Load().then(() => {
 				playPrices();
 				client.setPersona(SteamUser.EPersonaState.LookingToTrade);
 			});
@@ -343,7 +343,7 @@ manager.on('sentOfferChanged', offer => {
 		if (!isDupe) {
 			helper.newTradeOfferFinished(offer.id);
 
-			inventory.Load(true, () => {
+			inventory.Load().then(() => {
 				playPrices();
 				client.setPersona(SteamUser.EPersonaState.LookingToTrade);
 			});
@@ -793,7 +793,7 @@ client.chat.on('friendMessage', async Details => {
 });
 
 client.on('friendRelationship', (steamid, relationship) => {
-	if (relationship === 2) addFriend(steamid);
+	if (relationship === SteamUser.EFriendRelationship.RequestRecipient) addFriend(steamid);
 });
 
 function isId64(message, target, callback) {

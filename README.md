@@ -26,7 +26,7 @@ If you're grateful for what i'm doing, please consider donating. Even $1 is high
 ### Admins 
 - Unlimited admins capacity, you can setup how many admins you want, no matter the size of it.
 ### BotName 
-- Change botname, you can setup the script to change the botname in every startup, if needed, to display csgo rates (e.g 'Blue lvl #BOT 21:1')
+- Change botname, you can setup the script to change the botname in every startup, if needed, to display tf2 rates (e.g 'Blue lvl #BOT 21:1')
 ### !level Limit 
 - Setup the limit of the !level input to avoid over usage of your machine
 ### Inactivity 

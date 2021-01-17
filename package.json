@@ -19,5 +19,7 @@
 		"start": "node blue.js",
 		"debug": "node --expose-gc --inspect=9222 blue.js"
 	},
-	"engines" : { "node" : ">=12.19.1" }
+	"engines": {
+		"node": ">=12.20.1"
+	}
 }

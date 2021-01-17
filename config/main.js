@@ -1,5 +1,5 @@
-const dotenv = require('dotenv');
-dotenv.config();
+const {config:dotenv} = require('dotenv');
+dotenv();
 
 if (process.env.NODE_ENV == "development"){
 	module.exports = require('./main.dev.js'); 

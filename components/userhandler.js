@@ -1,9 +1,10 @@
-const SteamUser = require('steam-user');
+const {EFriendRelationship} = require('steam-user');
 const config = require('../config/main.js');
-const fs = require('graceful-fs');
+const {readFileSync} = require('graceful-fs');
 const moment = require('moment');
 const {Log, storeChatData, sleep} = require('azul-tools');
-const helper = require('./helpers.js');
+const {EOL:breakline} = require('os');
+const {Now} = require('./helpers.js');
 
 let client;
 let Warns = {};
@@ -35,11 +36,11 @@ async function Init() {
 	setup(...arguments);
 
 	try {
-		User.LastInteraction = JSON.parse(fs.readFileSync(`${process.cwd()}/data/LastUserInteracts.json`)) || User.LastInteraction;
+		User.LastInteraction = JSON.parse(readFileSync(`${process.cwd()}/data/LastUserInteracts.json`)) || User.LastInteraction;
 	} catch (e) {}
 
 	try {
-		User.LastComment = JSON.parse(fs.readFileSync(`${process.cwd()}/data/LastUserComments.json`)) || User.LastComment;
+		User.LastComment = JSON.parse(readFileSync(`${process.cwd()}/data/LastUserComments.json`)) || User.LastComment;
 	} catch (e) {}
 
 	setInterval(() => {
@@ -50,22 +51,20 @@ async function Init() {
 async function checkUsers() {
 	for (let UserID64 in client.myFriends) {
 
-		if (client.myFriends[UserID64] != SteamUser.EFriendRelationship.Friend) continue; //user is not a friend type
+		if (client.myFriends[UserID64] != EFriendRelationship.Friend) continue; //user is not a friend type
 		if (config.admin.indexOf(UserID64) > -1) continue; //user is an admin
 
 		if (!User.LastInteraction[UserID64]) { //somehow user doesn't not have an interact data
-			User.LastInteraction[UserID64] = helper.Now();
+			User.LastInteraction[UserID64] = Now();
 			continue;
 		}
 
 		if (moment().diff(User.LastInteraction[UserID64], 'days', true) >= config.maxDays) { //goodbye
-			let response = helper.breakline + "Hey, it's been a while since you're have inactive, I'll unfriend you, but if you need anything, just add me again :)";
-			response += helper.breakline + "Hope i'll see you again, bye!";
+			let response = breakline + "Hey, it's been a while since you're have inactive, I'll unfriend you, but if you need anything, just add me again :)";
+			response += breakline + "Hope i'll see you again, bye!";
 			Message(UserID64, response);
 			Log.Debug("User #" + UserID64 + " has have been inactive for a long time and has been removed from bot friendlist!", false, config.DebugLogs);
-			setTimeout(() => {
-				client.removeFriend(UserID64);
-			}, 2500);
+			setTimeout(() => client.removeFriend(UserID64), 2500);
 		}
 
 	}
@@ -87,9 +86,9 @@ function WarnUser(steamid){
 }
 
  async function Message(steamid, msg) {
- 	msg = msg.length > 25 ? (helper.breakline + msg) : msg;
+ 	msg = msg.length > 25 ? (breakline + msg) : msg;
  	try {
- 		const response = await client.chat.sendFriendMessage(steamid, msg.replace(/({breakline})/g, helper.breakline));
+ 		const response = await client.chat.sendFriendMessage(steamid, msg.replace(/({breakline})/g, breakline));
  		const server_timestamp = response.server_timestamp;
  		storeChatData(steamid, msg, true, server_timestamp);
  		return response;
@@ -97,11 +96,8 @@ function WarnUser(steamid){
  }
 
 function RegisterUserInteract(userID64, UpdateCommentDate = false) {
-	if (UpdateCommentDate) {
-		User.LastComment[userID64] = helper.Now();
-		return;
-	}
-	User.LastInteraction[userID64] = helper.Now();
+	if (UpdateCommentDate) return User.LastComment[userID64] = Now();
+	User.LastInteraction[userID64] = Now();
 }
 
 async function canComment(UserID64) {
@@ -117,6 +113,4 @@ async function sendAdminMessages(message) {
 		await Message(Admin, message);
 		await sleep(moment.duration(2, 'second'));
 	}
-
-	return;
 }

@@ -9,7 +9,7 @@ const
 	config = require('./config/main.js'),
 	rates = require('./config/rates.json'),
 	msg = require('./config/messages.json'),
-	BR = helper.breakline;
+	{EOL:BR} = require('os');
 
 require('events').EventEmitter.defaultMaxListeners = 0;
 
@@ -369,24 +369,19 @@ manager.on('sentOfferChanged', offer => {
 	}
 });
 
-function postComment(Target, Comment = "") {
+async function postComment(Target, Comment = "") {
+	const Target64 = Target.getSteamID64();
+	if (!await customer.canComment(Target64)) return;
 	return new Promise(resolve => {
-		const Target64 = Target.getSteamID64();
-		customer.canComment(Target64).then(canComment => {
-			if (!canComment) return resolve();
+		community.postUserComment(Target, Comment, err => {
+			if (!err) {
+				customer.UserInteract(Target64, true);
+				return resolve();
+			}
 
-			community.postUserComment(Target, Comment, err => {
-				if (!err) {
-					customer.UserInteract(Target64, true);
-					return resolve();
-				}
+			setTimeout(() => resolve(postComment(...arguments)), moment.duration(1, 'minute'));
+			Log.Debug(`Failed in post user #${Target} a comment, trying again in a minute. => ${err.message}`);
 
-				setTimeout(() => {
-					resolve(postComment(...arguments));
-				}, moment.duration(1, 'minute'));
-				Log.Debug(`Failed in post user #${Target} a comment, trying again in a minute. => ${err.message}`);
-
-			});
 		});
 	})
 }
@@ -427,38 +422,38 @@ function check(source) {
 	}
 }
 
-function buytf(source, qty, compare, mode) {
-	customer.Message(source, msg.CustomerRequest);
+async function buytf(CustomerID, qty, compare, mode) {
+	customer.Message(CustomerID, msg.CustomerRequest);
 
-	inventory.return_CustomerTFKeys(source, (err, KeysFromThemAsset) => {
-		if (err) handleInventoryErrors(err, source);
-		else {
-			const user_keys = KeysFromThemAsset.length;
-			if (user_keys) {
-				const need = qty;
-				const set_need = tfkeySets * qty;
-				if (user_keys >= need) {
-					inventory.getAvailableSetsForCustomer(source, compare, mode, set_need, (err, toSend) => {
-						if (err) {
-							handleBadgeErrors(err, source);
+	try {
+		const CustomerKeysAssets = await inventory.return_CustomerTFKeys(CustomerID);
+		const CustomerKeysAmount = CustomerKeysAssets.length;
+		if (CustomerKeysAmount) {
+			const need = qty;
+			const set_need = tfkeySets * qty;
+			if (CustomerKeysAmount >= need) {
+				inventory.getAvailableSetsForCustomer(CustomerID, compare, mode, set_need, (err, toSend) => {
+					if (err) {
+						handleBadgeErrors(err, CustomerID);
+					} else {
+						if (toSend.length == set_need) {
+							inventory.getToOfferKeys(CustomerKeysAssets, need, 440, toReceive => {
+								makeOffer(CustomerID, [].concat.apply([], toSend), toReceive, `${set_need}:${need}`, 0, "tf key(s)");
+							});
 						} else {
-							if (toSend.length == set_need) {
-								inventory.getToOfferKeys(KeysFromThemAsset, need, 440, toReceive => {
-									makeOffer(source, [].concat.apply([], toSend), toReceive, `${set_need}:${need}`, 0, "tf key(s)");
-								});
-							} else {
-								customer.Message(source, msg.i_need.replace("{currency_qty}", toSend.length).replace("{currency}", "sets").replace("{needed}", set_need));
-							}
+							customer.Message(CustomerID, msg.i_need.replace("{currency_qty}", toSend.length).replace("{currency}", "sets").replace("{needed}", set_need));
 						}
-					});
-				} else {
-					customer.Message(source, msg.them_need.replace("{currency_qty}", user_keys).replace("{currency}", "tf keys").replace("{needed}", need));
-				}
+					}
+				});
 			} else {
-				customer.Message(source, msg.Sorrythem2.replace("{currency_name}", "tf keys"));
+				customer.Message(CustomerID, msg.them_need.replace("{currency_qty}", CustomerKeysAmount).replace("{currency}", "tf keys").replace("{needed}", need));
 			}
+		} else {
+			customer.Message(CustomerID, msg.Sorrythem2.replace("{currency_name}", "tf keys"));
 		}
-	});
+	} catch (err) {
+		handleInventoryErrors(err, CustomerID);
+	}
 }
 
 function checkam(source, amount, callback) {
@@ -646,14 +641,10 @@ function shutdown() {
 	}, 1500);
 }
 
-client.chat.on('friendMessage', async Details => {
-
-	const source = Details.steamid_friend;
-	const message = Details.message_no_bbcode;
-	const server_timestamp = Details.server_timestamp;
-
+client.chat.on('friendMessage', async ({steamid_friend:source, server_timestamp, message_no_bbcode:message}) => {
+	
 	storeChatData(source, message, false, server_timestamp);
-
+	
 	if (await customer.checkSpam(source, server_timestamp) == true) {
 		customer.WarnUser(source);
 		const UserWarns = customer.getUserWarns(source);
@@ -701,9 +692,8 @@ client.chat.on('friendMessage', async Details => {
 		}
 		customer.Message(source, response);
 	} else if (m == '!dev' || m == '!proof' || m == '!developer' || m == '!azul') {
-		dev(source).then(_ => {
-			customer.Message(source, _);
-		})
+		const _ = await dev(source);
+		customer.Message(source, _);
 	} else if (m.indexOf("!check") > -1) {
 		if (m.split(" ")[1]) {
 			parseInputs(message, source, 1, inputs => {

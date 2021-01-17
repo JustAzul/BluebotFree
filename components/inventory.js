@@ -1,8 +1,8 @@
-const SteamUser = require('steam-user');
+const {EPersonaState} = require('steam-user');
 const config = require('../config/main.js');
 const moment = require('moment');
 const {Log, formatNumber, sleep} = require('azul-tools');
-const helper = require('./helpers.js');
+const {Now, getSetsCount, isSteamCommonError} = require('./helpers.js');
 const _SteamSupply = require('./SteamSupply.js');
 
 module.exports = Inventory;
@@ -34,9 +34,7 @@ Inventory.prototype.CatalogLoop = async function () {
 }
 
 Inventory.prototype.haveSets = function () {
-	return Object.values(this.AvailableSets).reduce((prevVal, set) => {
-		return prevVal + set.length;
-	}, 0);
+	return Object.values(this.AvailableSets).reduce((prevVal, set) => prevVal + set.length, 0);
 }
 
 Inventory.prototype.HaveKeys = function () {
@@ -48,46 +46,23 @@ Inventory.prototype.isInventoryloaded = async function () {
 }
 
 Inventory.prototype.Load = async function (force = false) {
-	const startedTime = helper.Now();
-	
+	const startedTime = Now();
+
 	const isInvLoaded = await this.isInventoryloaded();
 	if (isInvLoaded || !force) return false;
 
 	Log("Loading Bot Inventory..");
 	this.loading++;
-	this.client.setPersona(SteamUser.EPersonaState.Busy);
+	this.client.setPersona(EPersonaState.Busy);
 
-	const Load_TF2 = new Promise((resolve, reject) => {
-		this.loadTF2Inventory(err => {
-			if (err) {
-
-				if (err.message.toLowerCase().indexOf("failure") == -1) {					
-					setTimeout(() => {
-						resolve(Load_TF2);
-					}, moment.duration(5, 'seconds'));
-					return;
-				}
-
-				reject(new Error("This account doesn't have a TF2 Inventory"));
-			}
-
-			resolve();
-		});
-	});
-
-	const Load_Steam = new Promise((resolve, reject) => {
+	const Load_Steam = new Promise(resolve => {
 		this.loadInventory(err => {
-			if (err) {
-				setTimeout(() => {
-					resolve(Load_Steam);
-				}, moment.duration(5, 'seconds'));
-				return;
-			}
+			if (err) return setTimeout(() => {resolve(Load_Steam);}, moment.duration(5, 'seconds'));
 			resolve();
 		});
 	});
 
-	await Promise.all([Load_TF2, Load_Steam]);	
+	await Promise.all([this.loadTF2Inventory(), Load_Steam]);
 	this.loading--;
 	Log.Debug(`Inventory loaded in ${moment().diff(startedTime, 'seconds', true)} seconds!`, false, config.DebugLogs);
 }
@@ -97,54 +72,59 @@ Inventory.prototype.loadInventory = function (callback) {
 		if (err) {
 			if (callback) callback(err);
 		} else {
-			let InventoryCardsGame = {};
-
-			let cards = items.filter(item => {
-				if (item.getTag("item_class").internal_name == "item_class_2" && item.getTag("cardborder").internal_name == "cardborder_0") return item;
-			});
-
-			cards.forEach(item => {
-				let appid = item.market_hash_name.split("-")[0];
-				if (!InventoryCardsGame[appid]) InventoryCardsGame[appid] = {};
-				if (!InventoryCardsGame[appid][item.market_hash_name]) InventoryCardsGame[appid][item.market_hash_name] = [];
-				InventoryCardsGame[appid][item.market_hash_name].push(item);
-			});
-
-			const loginfo = `Found ${formatNumber(cards.length)} cards on inventory!`;
-			Log(loginfo);
-
-			this.UpdateSets(InventoryCardsGame, sets => {
-				Log(`Found ${formatNumber(sets)} card sets !`);
-				if (callback) callback();
-			});
+			this.OrganizeCards(items).then(({OrganizedInventoryCards, CardAmount}) => {
+				Log(`Found ${formatNumber(CardAmount)} cards on inventory!`);
+				this.UpdateSets(OrganizedInventoryCards, sets => {
+					Log(`Found ${formatNumber(sets)} card sets !`);
+					if (callback) callback();
+				});
+			});	
 		}
 	});
 }
 
-Inventory.prototype.loadTF2Inventory = function () {
-	this.return_CustomerTFKeys(this.client.steamID, (err, keys) => {
-		if (err) {
-			if (callback) callback(err);
-		} else {
-			this.CurrentKeys = keys;
+Inventory.prototype.OrganizeCards = async function (SteamInventory = []) {
+	let OrganizedInventoryCards = {};
 
-			if(config.SteamSupply.Enabled) {
-				const KeysAmount = this.HaveKeys();
-				_SteamSupply(KeysAmount);
+	const Cards = SteamInventory.filter(item => (item.getTag("item_class").internal_name == "item_class_2" && item.getTag("cardborder").internal_name == "cardborder_0"));
+
+	for (let i in Cards) {
+		const Card = Cards[i];
+		const AppID = Card.market_hash_name.split("-")[0];
+		if (!OrganizedInventoryCards[AppID]) OrganizedInventoryCards[AppID] = {};
+		if (!OrganizedInventoryCards[AppID][Card.market_hash_name]) OrganizedInventoryCards[AppID][Card.market_hash_name] = [];
+		OrganizedInventoryCards[AppID][Card.market_hash_name].push(Card);
+	}
+
+	const o = {
+		OrganizedInventoryCards: OrganizedInventoryCards,
+		CardAmount: Cards.length
+	};
+
+	return o;
+}
+
+Inventory.prototype.loadTF2Inventory = async function () {
+	try {
+		this.CurrentKeys = await this.return_CustomerTFKeys(this.client.steamID);
+		if (config.SteamSupply.Enabled) _SteamSupply(this.HaveKeys());
+		Log(`Found ${keys.length} TF Keys!`);
+	} catch (err) {
+		return Promise.reject(err);
+	}
+}
+
+Inventory.prototype.return_CustomerTFKeys = function (SteamID) {
+	return new Promise((resolve, reject) => {
+		this.getUserInventoryContents(SteamID, 440, 2, true, (err, items) => {
+			if (err) {
+				if (err.message.toLowerCase().indexOf("failure") == -1) return resolve([]);
+				return reject(err);
 			}
 
-			Log(`Found ${keys.length} TF Keys!`);
-			if (callback) callback();
-		}
-	});
-}
-
-Inventory.prototype.return_CustomerTFKeys = function (sid64, callback) {
-	this.getUserInventoryContents(sid64, 440, 2, true, (err, items) => {
-		if (err) return callback(err);
-
-		items = items.filter(item => item.market_hash_name.indexOf("Mann Co. Supply Crate Key") > -1);
-		callback(null, items.map(item => item.assetid));
+			items = items.filter(item => item.market_hash_name.indexOf("Mann Co. Supply Crate Key") > -1);
+			resolve(items.map(item => item.assetid));
+		});
 	});
 }
 
@@ -167,7 +147,7 @@ Inventory.prototype.checkGamesSetInfo = function (InventoryCardsGame, appIds, ca
 }
 
 Inventory.prototype.checkGameSet = function (InventoryCardsGame, GameAppID, callback) {
-	helper.getSetsCount(GameAppID).then(SetCount => {
+	getSetsCount(GameAppID).then(SetCount => {
 		if (Object.keys(InventoryCardsGame[GameAppID]).length == SetCount) {
 			let max = Math.min.apply(Math, Object.values(InventoryCardsGame[GameAppID]).map(card => card.length));
 
@@ -227,34 +207,18 @@ Inventory.prototype.getToOfferKeys = function (Keys, qty, appid, callback) {
 
 Inventory.prototype.getCustomerSets = function (ignore, sid64, callback, permit) {
 	this.getUserInventoryContents(sid64, 753, 6, true, async (err, items) => {
-		if (err) {
-			callback(err);
-			return;
-		}
+		if (err) return callback(err);
+		
+		const {OrganizedInventoryCards:CustomerCards} = await this.OrganizeCards(items);
+		let CustomerSets = [];
 
-		items = items.filter(item => {
-			if (item.getTag("item_class").internal_name == "item_class_2" && item.getTag("cardborder").internal_name == "cardborder_0") {
-				return item;
-			}
-		});
+		for (let AppID in CustomerCards) {
+			const SetCount = await getSetsCount(AppID);
 
-		let customer_sets = [],
-			customer_cards = {};
+			if (Object.keys(CustomerCards[AppID]).length === SetCount) {
 
-		items.forEach(card => {
-			const appid = card.market_hash_name.split("-")[0];
-			if (!customer_cards[appid]) customer_cards[appid] = {};
-			if (!customer_cards[appid][card.market_hash_name]) customer_cards[appid][card.market_hash_name] = [];
-			customer_cards[appid][card.market_hash_name].push(card);
-		});
-
-		for (let appid in customer_cards) {
-			const SetCount = await helper.getSetsCount(appid);
-
-			if (Object.keys(customer_cards[appid]).length == SetCount) {
-
-				let customerHave = Math.min.apply(Math, Object.values(customer_cards[appid]).map(card => card.length)),
-					botHave = this.AvailableSets[appid] ? this.AvailableSets[appid].length : 0,
+				let customerHave = Math.min.apply(Math, Object.values(CustomerCards[AppID]).map(card => card.length)),
+					botHave = this.AvailableSets[AppID] ? this.AvailableSets[AppID].length : 0,
 					limit = permit ? (config.maxStock + permit) : config.maxStock,
 					falt = limit - botHave;
 
@@ -263,17 +227,16 @@ Inventory.prototype.getCustomerSets = function (ignore, sid64, callback, permit)
 				for (let i = 0; i < customerHave; i++) {
 					let currentCustomerSet = []
 
-					for (let card in customer_cards[appid]) {
-						currentCustomerSet.push(customer_cards[appid][card][i]);
+					for (let card in CustomerCards[AppID]) {
+						currentCustomerSet.push(CustomerCards[AppID][card][i]);
 					}
 
-					customer_sets.push(currentCustomerSet);
+					CustomerSets.push(currentCustomerSet);
 				}
 			}
 
 		}
-
-		callback(null, customer_sets);
+		callback(null, CustomerSets);
 	});
 }
 
@@ -284,14 +247,9 @@ Inventory.prototype.getUserBadges = function (target, compare, mode, callback) {
 	}, (err, r) => {
 
 		if (err) {
-			if (helper.isSteamCommonError(err.message)) {
+			if (isSteamCommonError(err.message)) {
 				Log.Debug(`Failed to request #${target} badges, its a steam commom error, so trying again..`, false, config.DebugLogs);
-
-				setTimeout(() => {
-					this.getUserBadges(...arguments);
-				}, moment.duration(2, 'seconds'));
-
-				return;
+				return setTimeout(() => {this.getUserBadges(...arguments);}, moment.duration(2, 'seconds'));
 			}
 
 			return callback(err);
@@ -386,7 +344,7 @@ Inventory.prototype.getUserInventoryContents = function (a, b, c, d, callback) {
 	this.community.getUserInventoryContents(a, b, c, d, (err, ...items) => {
 		if (!err) return callback(null, ...items);
 
-		if (helper.isSteamCommonError(err.message)) {
+		if (isSteamCommonError(err.message)) {
 			Log.Debug(`Failed to request #${target} inventory, its a steam commom error, so trying again..`, false, config.DebugLogs);
 
 			setTimeout(() => {

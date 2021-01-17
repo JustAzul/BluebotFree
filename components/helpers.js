@@ -1,15 +1,14 @@
-const fs = require('graceful-fs');
-const moment = require('moment');
-const SteamTotp = require('steam-totp');
+const {readFileSync} = require('graceful-fs');
+const {duration} = require('moment');
+const {getAuthCode} = require('steam-totp');
 const RequestDatabase = require('../components/RequestDatabase.js');
-const {EOL} = require('os');
 const {Log, storeFile, readJSON, formatNumber} = require('azul-tools');
 const {DebugLogs, sharedse, username, password} = require('../config/main.js')
-const StdLib = require('@doctormckay/stdlib');
+const {DataStructures} = require('@doctormckay/stdlib');
 
 let CardDatabase = {};
 
-const Offers = new StdLib.DataStructures.LeastUsedCache(Infinity, moment.duration(10, 'minutes'));
+const Offers = new DataStructures.LeastUsedCache(Infinity, duration(10, 'minutes'));
 
 let Profits = {
 	"tf2": {
@@ -42,31 +41,25 @@ module.exports = {
 
 	UpdateProfits: UpdateProfit,
 
-	breakline: EOL,
 	Now: Now
 }
 
 async function Init(){
 	try {
-		Profits = JSON.parse(fs.readFileSync(`${process.cwd()}/data/profits.json`)) || Profits;
+		Profits = JSON.parse(readFileSync(`${process.cwd()}/data/profits.json`)) || Profits;
 	} catch (e) {}
 	await LoadLocalCardDatabase();
 
 	setInterval(() => {
 		Log.Debug("Updating card sets Database..", false, DebugLogs);
 		UpdateDatabase();
-	}, moment.duration(25, 'hours'));
+	}, duration(25, 'hours'));
 }
 
 async function UpdateDatabase() {
 	const FreshDatabase = await RequestDatabase();
-
-	return new Promise(resolve => {
-		storeData("database.json", FreshDatabase, true).then(() => {
-			Log.Debug(`Database up to date!, Found ${Object.keys(FreshDatabase).length} apps with cards!`, false, DebugLogs);
-			resolve();
-		})
-	});
+	await storeData("database.json", FreshDatabase, true);
+	Log.Debug(`Database up to date!, Found ${formatNumber(Object.keys(FreshDatabase).length)} apps with cards!`, false, DebugLogs);
 }
 
 async function getSetsCount(appid){
@@ -132,7 +125,7 @@ function getLogOn() {
 }
 
 async function GenerateSteamGuardToken() {
-    return SteamTotp.getAuthCode(sharedse);
+    return getAuthCode(sharedse);
 }
 
 async function ExpForLevel(level = 0) {

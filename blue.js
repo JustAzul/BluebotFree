@@ -70,7 +70,7 @@ client.once('accountLimitations', (limited, communityBanned, locked) => {
 });
 
 client.once('loggedOn', () => {
-	if (config.changeBotName) client.setPersona(SteamUser.EPersonaState.Online, config.changeBotName.replace("{csgo_rate}", `${tfkeySets}:1`));
+	if (config.changeBotName) client.setPersona(SteamUser.EPersonaState.Online, config.changeBotName.replace("{rate}", `${tfkeySets}:1`));
 	if (config.SteamSupply.Enabled) inventory.startCatalogLoop();
 });
 

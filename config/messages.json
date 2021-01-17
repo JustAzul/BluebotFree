@@ -48,14 +48,14 @@
 ,	"Trade_hold":"Sorry bro, but i'm not allowed to accept trade hold :c"
 
 ,	"OwnerRequest":"https://justazul.xyz"
-,	"CustomerRequest":"Proccessing your request.."
+,	"CustomerRequest":"/me Proccessing your request.."
 
 ,	"SendingOffer":"Sending trade offer yey"
 
 ,	"OfferSent":"Trade offer sent =D =D"
 ,	"OfferSent2":"quick link for u ^^: {url}"
 
-,	"Unknow":"Unknow command!, Type !help for more information."
-,	"UnknowAdmin":"Unknow command!, Type !help or !admin for more information."
+,	"Unknow":"/me  Unknow command!, Type !help for more information."
+,	"UnknowAdmin":"/me  Unknow command!, Type !help or !admin for more information."
 
 }

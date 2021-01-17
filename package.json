@@ -16,8 +16,8 @@
 		"steamcommunity": "^3.36.1"
 	},
 	"scripts": {
-		"start": "node --max-old-space-size=4096 blue.js",
-		"debug": "node --max-old-space-size=4096 --expose-gc --inspect=9222 blue.js"
+		"start": "node blue.js",
+		"debug": "node --expose-gc --inspect=9222 blue.js"
 	},
 	"engines" : { "node" : ">=12.19.1" }
 }

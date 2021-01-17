@@ -1,5 +1,5 @@
 const {SteamSupply, maxStock, maxTradeKeys, enableSell} = require('../config/main.js');
-const request = require('request');
+const got = require('got');
 const Rates = require('../config/rates.json');
 
 module.exports = SendData;
@@ -41,10 +41,11 @@ async function SendData(Tf2KeysAmount = 0) {
     if(SteamSupply.Api === "") throw new Error("Steam.Supply API its empty!");
 
     const o = {
-        "baseUrl": "https://steam.supply/API/",
-        "uri": SteamSupply.Api + "/update/",
-        "qs": SteamSupplyData
+        "url": "https://steam.supply/API/" + SteamSupply.Api + "/update/",
+        "searchParams": SteamSupplyData
     };
 
-    request(o);
+    try {
+        got(o);
+    } catch (e) {}
 }

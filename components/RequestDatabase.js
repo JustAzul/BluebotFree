@@ -1,5 +1,5 @@
-const request = require('request');
-const moment = require('moment');
+const got = require('got');
+const {duration} = require('moment');
 const {Log} = require('azul-tools');
 const {DebugLogs, SteamSupply} = require('../config/main.js');
 
@@ -16,75 +16,54 @@ async function RequestDatabase() {
     return RequestBarter();
 }
 
-function RequestSteamSupply(Attempts = 1) {
-    Log.Debug(`Requesting steam.supply sets database, Attempt #${Attempts}..`, false, DebugLogs);
-    return new Promise((resolve, reject) => {
-        request.get(`https://steam.supply/API/${SteamSupply.Api}/cardamount`, {
-            "json": true
-        }, (err, res, data) => {
-            if (err || res.statusCode != 200) {
-                Log.Debug(`Failed to request steam.supply database, trying again in a minute.`, false, DebugLogs);
-                setTimeout(() => {
-                    resolve(RequestSteamSupply(Attempts + 1));
-                }, moment.duration(1, 'minute'));
-                return;
-            }
+async function RequestSteamSupply(Attempts = 1) {
+    Log.Debug(`Requesting Steam.Supply sets database, Attempt #${Attempts}..`, false, DebugMode);
 
-            if (data.indexOf("you are not paid.") > -1 || data.indexOf("API key not found") > -1) {
-                reject("Your steam.supply api its not correct, or you its not featured.");
-                return;
-            }
+    const ParseDatabase = async (data) => JSON.parse(data.trim());
 
-            parseSteamSupplyDatabase(data).then(resolve)
-                .catch(err => {
-                    Log.Debug(`Failed to parse steam.supply database, trying again in a minute.`, false, DebugLogs);
-                    setTimeout(() => {
-                        resolve(RequestSteamSupply(Attempts + 1));
-                    }, moment.duration(1, 'minute'));
-                    return;
-                });
-        })
-    })
-}
+    try {
+        const {statusCode, body} = await got(`https://steam.supply/API/${SteamSupply.Api}/cardamount`);
 
-function RequestBarter(Attempts = 1) {
-    Log.Debug(`Requesting sets database, Attempt #${Attempts}..`, false, DebugLogs);
-    return new Promise((resolve, reject) => {
-        request.get('https://bartervg.com/browse/cards/json/', {
-            "json": true
-        }, (err, res, data) => {
+        if(statusCode !== 200) throw new Error("Bad statusCode");
+        if (body.indexOf("you are not paid.") > -1 || body.indexOf("API key not found") > -1) throw new Error("bad");
 
-            //if (Attempts >= 5) return reject(`Failed to many times to request barter database!`);
-            if (err || res.statusCode != 200) {
-
-                Log.Debug(`Failed to request barter.vg database, trying again in a minute.`, false, DebugLogs);
-
-                return setTimeout(() => {
-                    resolve(RequestBarter(Attempts + 1));
-                }, moment.duration(1, 'minute'));
-
-            }
-
-           return parseBarterDatabase(data).then(resolve);
-
-        })
-    })
-}
-
-async function parseBarterDatabase(db) {
-    let newDB = {};
-
-    for (let AppId in db) {
-        const details = db[AppId];
-        newDB[AppId] = details.cards;
+        return ParseDatabase(body);
+    } catch (err) {        
+        if (err.message === "bad") return Promise.reject("Your Steam.Supply API does not exist.");
+        Log.Debug(`Failed to request Steam.Supply database, trying again in a minute.`, false, DebugMode);
+        await sleep(duration(1, 'minute'));
+        return RequestSteamSupply(Attempts++);
     }
-
-    return newDB;
 }
 
-async function parseSteamSupplyDatabase(data) {
-    const db = JSON.parse(data.trim());
-    return db;
+async function RequestBarter(Attempts = 1) {
+    Log.Debug(`Requesting Barter.vg sets database, Attempt #${Attempts}..`, false, DebugMode);
+
+    const ParseDatabase = async function(data) {
+        let newDB = {};
+
+        for (let AppId in data) {
+            const details = data[AppId];
+            newDB[AppId] = details.cards;
+        }
+
+        return newDB;
+    };
+
+    const o = {
+        "url": "https://bartervg.com/browse/cards/json/",
+        "responseType": "json"
+    };
+
+    try {
+        const {statusCode, body} = await got(o);
+        if(statusCode !== 200) throw new Error("Bad statusCode");        
+        return ParseDatabase(body);
+    } catch (err) {
+        Log.Debug(`Failed to request Barter.vg database, trying again in a minute.`, false, DebugMode);
+        await sleep(duration(1, 'minute'));
+        return RequestBarter(Attempts++);
+    }
 }
 
 module.exports = RequestDatabase;

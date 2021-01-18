@@ -27,7 +27,6 @@ let client = new SteamUser(),
 		"savePollData": true
 	}),
 	inventory = new Inventory(community, client),
-	timeouts = {},
 
 	tfkeySets = rates.SellPrice,
 	tfkeyBuySets = rates.BuyPrice;
@@ -95,18 +94,22 @@ client.on('webSession', (sessionID, newCookie) => {
 
 function loadmanager(newCookie) {
 	manager.setCookies(newCookie, async err => {
-		if (err) return loadmanager(newCookie);
-
-		if (!inventory.apiKey) Log(`Successfully loaded API Key!`);
+		if (err) {
+			await sleep(moment.duration(5, "seconds"));
+			loadmanager(newCookie);
+			return;
+		}
 
 		inventory.apiKey = manager.apiKey;
 		community.startConfirmationChecker(1000 * 20, config.identity);
 
+		if (!inventory.apiKey) {
+			Log(`Successfully loaded API Key!`);
+			setInterval(checkSteamLogged, moment.duration(10, "minutes"));
+		}
+
 		await inventory.Load();
 		online();
-
-		clearInterval(timeouts['CheckL_i']);
-		timeouts['CheckL_i'] = setInterval(checkSteamLogged, moment.duration(10, "minutes"));
 	});
 }
 
@@ -189,89 +192,73 @@ function checkSteamLogged() {
 	});
 }
 
-function makeOffer(target, itemsFromMe, itemsFromThem, details, type, currency) {
+function makeOffer(CustomerID, itemsFromMe = [], itemsFromThem = [], details = {}, type, currency) {
 
 	switch (type) {
 		case 0:
 			/* selling */
-			Log.Trade(`Creating trade offer for #${target} with ${itemsFromMe.length} items (${details.split(":")[0]} sets) to send and ${itemsFromThem.length} items (${details.split(":")[1]} ${currency}) to receive`);
+			Log.Trade(`Creating trade offer for #${CustomerID} with ${itemsFromMe.length} items (${details.split(":")[0]} sets) to send and ${itemsFromThem.length} items (${details.split(":")[1]} ${currency}) to receive`);
 			break;
 		case 1:
 			/* buying */
-			Log.Trade(`Creating trade offer for #${target} with ${itemsFromMe.length} items (${details.split(":")[1]} ${currency}) to send and ${itemsFromThem.length} items (${details.split(":")[0]} sets) to receive`);
+			Log.Trade(`Creating trade offer for #${CustomerID} with ${itemsFromMe.length} items (${details.split(":")[1]} ${currency}) to send and ${itemsFromThem.length} items (${details.split(":")[0]} sets) to receive`);
 			break;
 		default:
-			Log.Trade(`Creating trade offer for #${target} with ${itemsFromMe.length} items to send and ${itemsFromThem.length} items to receive`);
+			Log.Trade(`Creating trade offer for #${CustomerID} with ${itemsFromMe.length} items to send and ${itemsFromThem.length} items to receive`);
 			break;
 	}
 
 	try {
-		const
-			offer = manager.createOffer(target),
-			addMyItemsCount = offer.addMyItems(itemsFromMe),
-			addTheirItemsCount = offer.addTheirItems(itemsFromThem);
+		const Offer = manager.createOffer(CustomerID);
 
-		offer.data('SellInfo', details);
-		offer.data('SellInfoType', type);
-		offer.data('SellInfoCurrency', currency);
+		Offer.addMyItems(itemsFromMe);
+		Offer.addTheirItems(itemsFromThem);
 
-		offer.getUserDetails((err, me, them) => {
+		Offer.data('SellInfo', details);
+		Offer.data('SellInfoType', type);
+		Offer.data('SellInfoCurrency', currency);
+
+		Offer.getUserDetails((err, me, them) => {
 			if (err) {
 				if (err.message.toLowerCase().indexOf("is not available to trade. more information will be") > -1) {
-					customer.Message(target, msg.Trade_error1);
-					Log.Trade(`#${target} is unavailable to trade`);
-				} else Log.Error(err.message);
-			} else {
-				if (them.escrowDays) {
-					customer.Message(target, msg.Trade_hold);
-				} else {
-					Log.Debug(`Sending offer for #${target}`, false, config.DebugLogs);
-					offer.send((err, status) => {
-						Log.Debug(`Offer #${offer.id} status: ${status}, err: ${err}`, false, config.DebugLogs);
-						if (err) {
-							if (err.message.toLowerCase().indexOf("sent too many trade offers") > 1) {
-								customer.Message(target, msg.Trade_error2);
-							} else if (err.message.toLowerCase().indexOf("please try again later. (26)") > 1) {
-								Log.Warn("Error 26", 'offer.send');
-								customer.Message(target, msg.Trade_error);
-							} else {
-								Log.Error(err.message);
-								customer.Message(target, msg.Trade_error);
-							}
-						} else {
-							manager.getOffer(offer.id, (err, myOffer) => {
-								if (err) {
-									Log.Error(err.message);
-									customer.Message(target, msg.Trade_error);
-									if (err.message.indexOf("socket hang up") > -1 || err.message.indexOf("ESOCKETTIMEDOUT") > -1) {
-										webLogin();
-									}
-								} else {
-									if (addMyItemsCount != myOffer.itemsToGive.length) {
-										Log.Error('Cant add itemsFromMe, some item is missing in my inventory!');
-										customer.Message(target, msg.Trade_error);
-										myOffer.cancel();
-									} else if (addTheirItemsCount != myOffer.itemsToReceive.length) {
-										Log.Error('Cant add itemsFromThem, some item is missing in my inventory!');
-										customer.Message(target, msg.Trade_error);
-										myOffer.cancel();
-									} else if (status == 'pending') {
-										community.checkConfirmations();
-									} else {
-										let response = msg.OfferSent;
-										response += BR + msg.OfferSent2.replace("{url}", `https://steamcommunity.com/tradeoffer/${offer.id}`);
-										customer.Message(target, response);
-										Log.Trade(`Successfully sent a trade offer for ${target}`);
-									}
-								}
-							});
-						}
-					});
+					customer.Message(CustomerID, msg.Trade_error1);
+					Log.Trade(`#${CustomerID} is unavailable to trade`);
+					return;
 				}
+
+				return Log.Error(err.message);
 			}
+
+			if ((them.escrowDays + me.escrowDays) > 0) return customer.Message(CustomerID, msg.Trade_hold);
+
+			Log.Debug(`Sending offer for #${CustomerID}`, false, config.DebugLogs);
+			Offer.send((err, OfferStatus) => {
+				//Log.Debug(`Offer #${Offer.id} status: ${OfferStatus}, err: ${err}`, false, config.DebugLogs);
+				if (err) {
+					if (err.message.toLowerCase().indexOf("sent too many trade offers") > 1) return customer.Message(CustomerID, msg.Trade_error2);
+					throw err;
+				}
+
+				manager.getOffer(Offer.id, (err /* , myOffer */ ) => {
+					if (err) {
+						Log.Error(err.message);
+						if (helper.isSteamCommonError(err.message)) webLogin();
+						throw err;
+					}
+
+					if (OfferStatus === 'pending') return community.checkConfirmations();
+
+					let response = msg.OfferSent;
+					response += BR + msg.OfferSent2.replace("{url}", `https://steamcommunity.com/tradeoffer/${Offer.id}`);
+					customer.Message(CustomerID, response);
+					Log.Trade(`Successfully sent a trade offer for ${CustomerID}`);
+
+				});
+
+			});
 		});
 	} catch (e) {
-		customer.Message(target, msg.Trade_error);
+		customer.Message(CustomerID, msg.Trade_error);
 	}
 }
 

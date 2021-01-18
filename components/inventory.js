@@ -241,9 +241,7 @@ Inventory.prototype.getUserBadges = async function (SteamID, Compare = false, Co
 		for(const i in badges) {
 			const {appid, level, border_color} = badges[i];
 			if (!appid || border_color !== 0) continue;
-
-			const CanGet = CollectorMode ? (level ? 0 : 1) : (5 - level);
-			Badges[appid] = Math.max(CanGet < 0 ? 0 : CanGet, 0);
+			Badges[appid] = CollectorMode ? (level ? 0 : 1) : (5 - level);
 		}
 
 		const o = {

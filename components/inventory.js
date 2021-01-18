@@ -242,6 +242,7 @@ Inventory.prototype.getUserBadges = async function (SteamID, Compare = false, Co
 			const {appid, level, border_color} = badges[i];
 			if ((!border_color || border_color !== 0) || !appid) continue;
 			Badges[appid] = CollectorMode ? (level ? 0 : 1) : (5 - level);
+			Badges[appid] = Badges[appid] < 0 ? 0 : Badges[appid] //we need this, cuz Holiday sets zZzzZZ
 		}
 
 		const o = {

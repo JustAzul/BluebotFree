@@ -44,15 +44,16 @@ module.exports = {
 	Now: Now
 }
 
-async function Init(){
+async function Init() {
 	try {
 		Profits = JSON.parse(readFileSync(`${process.cwd()}/data/profits.json`)) || Profits;
 	} catch (e) {}
 
-	await LoadLocalCardDatabase();
-	await UpdateDatabase();
+	const AwaitUpdate = await LoadLocalCardDatabase();
+	if (AwaitUpdate) await UpdateDatabase();
+	else UpdateDatabase();
 
-	setInterval(() => {		
+	setInterval(() => {
 		UpdateDatabase();
 	}, duration(12, 'hours'));
 }
@@ -81,10 +82,13 @@ function newTradeOfferFinished(OfferID){
 	Offers.add(OfferID, true);
 }
 
-async function LoadLocalCardDatabase(){
+async function LoadLocalCardDatabase() {
 	CardDatabase = await readJSON("data/database.json");
-	if(Object.keys(CardDatabase).length == 0) return UpdateDatabase();
-	Log.Debug(`Successfuly loaded ${formatNumber(Object.keys(CardDatabase).length)} apps!`, false, DebugLogs);
+	if (Object.keys(CardDatabase).length > 0) {
+		Log.Debug(`Successfuly loaded ${formatNumber(Object.keys(CardDatabase).length)} apps from local database!`, false, DebugLogs);
+		return false;
+	}
+	return true;
 }
 
 async function UpdateProfit(SellInfoType, SellInfoCurrency, _sets, _currency) {

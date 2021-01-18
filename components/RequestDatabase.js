@@ -17,7 +17,7 @@ async function RequestDatabase() {
 }
 
 async function RequestSteamSupply(Attempts = 1) {
-    Log.Debug(`Requesting Steam.Supply sets database, Attempt #${Attempts}..`, false, DebugMode);
+    Log.Debug(`Requesting Steam.Supply sets database, Attempt #${Attempts}..`, false, DebugLogs);
 
     const ParseDatabase = async (data) => JSON.parse(data.trim());
 
@@ -30,14 +30,14 @@ async function RequestSteamSupply(Attempts = 1) {
         return ParseDatabase(body);
     } catch (err) {        
         if (err.message === "bad") return Promise.reject("Your Steam.Supply API does not exist.");
-        Log.Debug(`Failed to request Steam.Supply database, trying again in a minute.`, false, DebugMode);
+        Log.Debug(`Failed to request Steam.Supply database, trying again in a minute.`, false, DebugLogs);
         await sleep(duration(1, 'minute'));
         return RequestSteamSupply(Attempts++);
     }
 }
 
 async function RequestBarter(Attempts = 1) {
-    Log.Debug(`Requesting Barter.vg sets database, Attempt #${Attempts}..`, false, DebugMode);
+    Log.Debug(`Requesting Barter.vg sets database, Attempt #${Attempts}..`, false, DebugLogs);
 
     const ParseDatabase = async function(data) {
         let newDB = {};
@@ -60,7 +60,7 @@ async function RequestBarter(Attempts = 1) {
         if(statusCode !== 200) throw new Error("Bad statusCode");        
         return ParseDatabase(body);
     } catch (err) {
-        Log.Debug(`Failed to request Barter.vg database, trying again in a minute.`, false, DebugMode);
+        Log.Debug(`Failed to request Barter.vg database, trying again in a minute.`, false, DebugLogs);
         await sleep(duration(1, 'minute'));
         return RequestBarter(Attempts++);
     }

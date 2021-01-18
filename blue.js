@@ -32,7 +32,9 @@ let client = new SteamUser(),
 	tfkeyBuySets = rates.BuyPrice;
 
 (async () => {
+	Log(`Initing handy functions..`);
 	await helper.Init();
+	Log(`Initing customer manager..`);
 	await customer.Init(client);
 	login();
 })();

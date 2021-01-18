@@ -4,6 +4,7 @@ const moment = require('moment');
 const {Log, formatNumber, sleep} = require('azul-tools');
 const {Now, getSetsCount, isSteamCommonError} = require('./helpers.js');
 const _SteamSupply = require('./SteamSupply.js');
+const GetBadges = require('./GetBadges.js');
 
 module.exports = Inventory;
 
@@ -13,10 +14,12 @@ function Inventory(community, client) {
 	this.client = client;
 
 	this.apiKey = null;
-	this.loading = 0;
+	this.CumulativeLoads = 0;
 
 	this.CurrentKeys = [];
+
 	this.AvailableSets = {};
+	this.SetsAmount = 0;
 };
 
 Inventory.prototype.startCatalogLoop = function () {
@@ -34,53 +37,29 @@ Inventory.prototype.CatalogLoop = async function () {
 }
 
 Inventory.prototype.haveSets = function () {
-	return Object.values(this.AvailableSets).reduce((prevVal, set) => prevVal + set.length, 0);
+	return parseInt(this.SetsAmount);
 }
 
 Inventory.prototype.HaveKeys = function () {
-	return this.CurrentKeys.length;
+	return parseInt(this.CurrentKeys.length);
 }
 
 Inventory.prototype.isInventoryloaded = async function () {
-	return Object.keys(this.AvailableSets).length + this.HaveKeys();
+	return (this.haveSets() + this.HaveKeys()) > 0;
 }
 
-Inventory.prototype.Load = async function (force = false) {
-	const startedTime = Now();
-
+Inventory.prototype.Load = async function (ForceLoad = false) {
+	
 	const isInvLoaded = await this.isInventoryloaded();
-	if (isInvLoaded || !force) return false;
+	if (!ForceLoad && isInvLoaded) return false;
 
 	Log("Loading Bot Inventory..");
-	this.loading++;
+	
+	this.CumulativeLoads++;
 	this.client.setPersona(EPersonaState.Busy);
-
-	const Load_Steam = new Promise(resolve => {
-		this.loadInventory(err => {
-			if (err) return setTimeout(() => {resolve(Load_Steam);}, moment.duration(5, 'seconds'));
-			resolve();
-		});
-	});
-
-	await Promise.all([this.loadTF2Inventory(), Load_Steam]);
-	this.loading--;
-	Log.Debug(`Inventory loaded in ${moment().diff(startedTime, 'seconds', true)} seconds!`, false, config.DebugLogs);
-}
-
-Inventory.prototype.loadInventory = function (callback) {
-	this.getUserInventoryContents(this.client.steamID, 753, 6, true, (err, items) => {
-		if (err) {
-			if (callback) callback(err);
-		} else {
-			this.OrganizeCards(items).then(({OrganizedInventoryCards, CardAmount}) => {
-				Log(`Found ${formatNumber(CardAmount)} cards on inventory!`);
-				this.UpdateSets(OrganizedInventoryCards, sets => {
-					Log(`Found ${formatNumber(sets)} card sets !`);
-					if (callback) callback();
-				});
-			});	
-		}
-	});
+	
+	await Promise.all([this.loadTF2Inventory(), this.loadInventory()]);
+	this.CumulativeLoads--;
 }
 
 Inventory.prototype.OrganizeCards = async function (SteamInventory = []) {
@@ -104,80 +83,81 @@ Inventory.prototype.OrganizeCards = async function (SteamInventory = []) {
 	return o;
 }
 
+Inventory.prototype.parseSets = async function (OrganizeCards = {}) {
+	let Parsed = {};
+	let ParsedAmount = 0;
+
+	const ParseSet = async (AppID, i) => {
+		ParsedSet = [];
+
+		for (let key in OrganizeCards[AppID]) {
+			ParsedSet.push(OrganizeCards[AppID][key][i]);
+		}
+
+		return ParsedSet;
+	}
+
+	for (let AppID in OrganizeCards) {
+
+		const SetCount = await getSetsCount(AppID);
+		if (Object.keys(OrganizeCards[AppID]).length !== SetCount) continue;
+
+		const max = Math.min.apply(Math, Object.values(OrganizeCards[AppID]).map(card => card.length));
+		Parsed[AppID] = [];
+
+		for (let i = 0; i < max; i++) {
+			const currentSet = await ParseSet(AppID, i);
+			Parsed[AppID].push(currentSet);
+			ParsedAmount++;
+		}
+	}
+
+	const o = {
+		CardSets: Parsed,
+		Amount: ParsedAmount
+	};
+
+	return o;
+};
+
+Inventory.prototype.loadInventory = async function () {
+	try {
+		const {Contents} = await this.getUserInventoryContents(this.client.steamID, 753, 6, true);
+		const {OrganizedInventoryCards, CardAmount} = await this.OrganizeCards(Contents);			
+		const {Amount, CardSets} = await this.parseSets(OrganizedInventoryCards);
+	
+		Log(`Found ${formatNumber(CardAmount)} cards, and ${formatNumber(Amount)} card sets on inventory!`);
+	
+		this.AvailableSets = CardSets;
+		this.SetsAmount = Amount;
+	} catch (err) {
+		throw err;
+	}
+}
+
 Inventory.prototype.loadTF2Inventory = async function () {
 	try {
 		this.CurrentKeys = await this.return_CustomerTFKeys(this.client.steamID);
 		if (config.SteamSupply.Enabled) _SteamSupply(this.HaveKeys());
-		Log(`Found ${keys.length} TF Keys!`);
+		Log(`Found ${this.CurrentKeys.length} TF Keys!`);
 	} catch (err) {
-		return Promise.reject(err);
+		throw err;
 	}
 }
 
-Inventory.prototype.return_CustomerTFKeys = function (SteamID) {
-	return new Promise((resolve, reject) => {
-		this.getUserInventoryContents(SteamID, 440, 2, true, (err, items) => {
-			if (err) {
-				if (err.message.toLowerCase().indexOf("failure") == -1) return resolve([]);
-				return reject(err);
-			}
-
-			items = items.filter(item => item.market_hash_name.indexOf("Mann Co. Supply Crate Key") > -1);
-			resolve(items.map(item => item.assetid));
-		});
-	});
+Inventory.prototype.return_CustomerTFKeys = async function (SteamID) {
+	try {
+		const {Contents} = await this.getUserInventoryContents(SteamID, 440, 2, true);
+		const Keys = Contents.filter(item => item.market_hash_name.indexOf("Mann Co. Supply Crate Key") > -1);
+		return (Keys.map(item => item.assetid));
+	} catch (err) {
+		if (err.message.toLowerCase().indexOf("failure") === -1) return [];
+		throw err;
+	}
 }
 
-Inventory.prototype.checkGamesSetInfo = function (InventoryCardsGame, appIds, callback) {
-	if (!appIds.length) return callback();
-
-	this.AvailableSets = {};
-	let checked = 0;
-
-	const done = () => {
-		checked++;
-		if (checked == appIds.length) callback();
-	};
-
-	appIds.forEach(appId => {
-		this.checkGameSet(InventoryCardsGame, appId, () => {
-			done();
-		});
-	});
-}
-
-Inventory.prototype.checkGameSet = function (InventoryCardsGame, GameAppID, callback) {
-	getSetsCount(GameAppID).then(SetCount => {
-		if (Object.keys(InventoryCardsGame[GameAppID]).length == SetCount) {
-			let max = Math.min.apply(Math, Object.values(InventoryCardsGame[GameAppID]).map(card => card.length));
-
-			this.AvailableSets[GameAppID] = [];
-
-			for (let i = 0; i < max; i++) {
-				let currentSet = [];
-
-				for (let key in InventoryCardsGame[GameAppID]) {
-					currentSet.push(InventoryCardsGame[GameAppID][key][i]);
-				}
-
-				this.AvailableSets[GameAppID].push(currentSet);
-			}
-
-		}
-		callback();
-	})
-}
-
-Inventory.prototype.UpdateSets = function (InventoryCardsGame, callback) {
-	this.checkGamesSetInfo(InventoryCardsGame, Object.keys(InventoryCardsGame), () => {
-		callback(this.haveSets());
-	});
-}
-
-Inventory.prototype.getToOffer_TF_Keys = function (qty, callback) {
-	this.getToOfferKeys(this.CurrentKeys, qty, 440, send => {
-		callback(send);
-	});
+Inventory.prototype.getToOffer_TF_Keys = async function (Amout = 0) {
+	return this.getToOfferKeys(this.CurrentKeys, Amout);
 }
 
 Inventory.prototype.getToOfferSets = function (Keys, qty, callback) {
@@ -190,170 +170,145 @@ Inventory.prototype.getToOfferSets = function (Keys, qty, callback) {
 	callback(send);
 }
 
-Inventory.prototype.getToOfferKeys = function (Keys, qty, appid, callback) {
-	let send = [];
+Inventory.prototype.getToOfferKeys = async function (KeysArray = [], Amount = 0) {
+	let ToSendArray = [];
 
-	for (let b = 0; b < qty; b++) {
-		send.push({
-			appid: appid,
-			contextid: 2,
-			amount: 1,
-			assetid: Keys[b]
-		});
+	const ItemTemplate = {
+		"appid": 440,
+		"contextid": 2,
+		"amount": 1
+	};
+
+	for (const i = 0; i < Amount; i++) {
+		
+		const o = {
+			"assetid": KeysArray[i],
+			...ItemTemplate
+		};
+
+		ToSendArray.push(o);
 	}
 
-	callback(send);
+	return ToSendArray;
 }
 
-Inventory.prototype.getCustomerSets = function (ignore, sid64, callback, permit) {
-	this.getUserInventoryContents(sid64, 753, 6, true, async (err, items) => {
-		if (err) return callback(err);
-		
-		const {OrganizedInventoryCards:CustomerCards} = await this.OrganizeCards(items);
+Inventory.prototype.getCustomerSets = async function (SteamID, IgnoreLimit = false, callback) {
+	
+	try {
+		const {Contents} = await this.getUserInventoryContents(SteamID, 753, 6, true);
+		const {OrganizedInventoryCards} = await this.OrganizeCards(Contents);			
+		const {CardSets} = await this.parseSets(OrganizedInventoryCards);
+			
 		let CustomerSets = [];
-
-		for (let AppID in CustomerCards) {
-			const SetCount = await getSetsCount(AppID);
-
-			if (Object.keys(CustomerCards[AppID]).length === SetCount) {
-
-				let customerHave = Math.min.apply(Math, Object.values(CustomerCards[AppID]).map(card => card.length)),
-					botHave = this.AvailableSets[AppID] ? this.AvailableSets[AppID].length : 0,
-					limit = permit ? (config.maxStock + permit) : config.maxStock,
-					falt = limit - botHave;
-
-				customerHave = !ignore ? ((falt > 0) ? (Math.min(...[falt, customerHave])) : 0) : customerHave;
-
-				for (let i = 0; i < customerHave; i++) {
-					let currentCustomerSet = []
-
-					for (let card in CustomerCards[AppID]) {
-						currentCustomerSet.push(CustomerCards[AppID][card][i]);
-					}
-
-					CustomerSets.push(currentCustomerSet);
-				}
-			}
-
+	
+		for (let AppID in CardSets) {
+			const BotStock = this.AvailableSets.hasOwnProperty(AppID) ? this.AvailableSets[AppID].length : 0;
+			const CustomerStock = CardSets[AppID].length;
+			const Limit = IgnoreLimit ? CustomerStock : Math.min((CustomerStock - BotStock), config.maxStock);
+	
+			if (Limit <= 0) continue;
+	
+			const toPush = CardSets[AppID].splice(0, Limit);
+			CustomerSets.push(...toPush);
 		}
-		callback(null, CustomerSets);
-	});
+	
+		return CustomerSets
+	} catch(err){
+		throw err
+	}	
+
 }
 
-Inventory.prototype.getUserBadges = function (target, compare, mode, callback) {
-	this.client._apiRequest("GET", "IPlayerService", "GetBadges", 1, {
-		"steamid": target,
-		"key": this.apiKey
-	}, (err, r) => {
+Inventory.prototype.getUserBadges = async function (SteamID, Compare = false, CollectorMode = false) {
+	try {
+		const {badges, player_xp, player_level} = await GetBadges(SteamID.toString(), this.apiKey);
 
-		if (err) {
-			if (isSteamCommonError(err.message)) {
-				Log.Debug(`Failed to request #${target} badges, its a steam commom error, so trying again..`, false, config.DebugLogs);
-				return setTimeout(() => {this.getUserBadges(...arguments);}, moment.duration(2, 'seconds'));
-			}
+		const Result = {
+			"player_xp": player_xp,
+			"player_level": player_level
+		};
 
-			return callback(err);
+		if (!Compare) {
+			delete badges;
+			if (!player_level) throw new Error("empty");
+			return Result;
 		}
 
-		if (!compare) {
-			if (!r.response.player_level) {
-				const o = {
-					message: "empty"
-				};
+		if(!badges || badges.length === 0) throw new Error("empty");
 
-				return callback(o);
-			}
+		let Badges = {};
 
-			return callback(null, {}, parseInt(r.response.player_level), parseInt(r.response.player_xp));
-		}
+		for(const i in badges) {
+			const {appid, level, border_color} = badges[i];
+			if (!appid || border_color !== 0) continue;
 
-		const badges = r.response.badges;
-		if (badges && Object.keys(badges)) {
-			let badge = {};
-
-			for (let key in badges) {
-				const current_badge = badges[key],
-					appid = current_badge.appid,
-					lvl = parseInt(current_badge.level);
-				if (appid && current_badge.border_color == 0) {
-					badge[appid] = (mode == 1) ? (lvl ? 0 : 1) : (5 - lvl);
-					badge[appid] = badge[appid] < 0 ? null : badge[appid];
-				}
-			}
-
-			return callback(null, badge, parseInt(r.response.player_level), parseInt(r.response.player_xp));
+			const CanGet = CollectorMode ? (level ? 0 : 1) : (5 - level);
+			Badges[appid] = Math.max(CanGet < 0 ? 0 : CanGet, 0);
 		}
 
 		const o = {
-			message: "empty"
+			"Badges": Badges,
+			...Result
 		};
 
-		return callback(o);
-	});
-}
+		return o;
 
-Inventory.prototype.getAvailableSetsForCustomer = function (target, compare, mode, max, callback) {
-	if (compare) {
-		this.getUserBadges(target, compare, mode, (err, badge) => {
-			if (err) callback(err); 
-			else {
-				let toSend = [],
-					need = () => max - toSend.length;
-
-				for (let appid in this.AvailableSets) {
-					let available_qty = 0;
-					available_qty += Math.min(...[this.AvailableSets[appid].length, (badge[appid] != null ? badge[appid] : mode)]);
-
-					if (available_qty && need()) {
-						for (let i = 0; i < available_qty; i++) {
-							if (need()) {
-								toSend.push(this.AvailableSets[appid][i]);
-								if (!need()) {
-									break;
-								}
-							}
-						}
-					}
-				}
-				callback(null, toSend);
-			}
-		});
-	} else {
-		let toSend = [],
-			need = () => max - toSend.length;
-
-		for (let appid in this.AvailableSets) {
-			let available_qty = Math.min(...[this.AvailableSets[appid].length, 5]);
-
-			if (available_qty && need()) {
-				for (let i = 0; i < available_qty; i++) {
-					if (need()) {
-						toSend.push(this.AvailableSets[appid][i]);
-						if (!need()) {
-							break;
-						}
-					}
-				}
-			}
-		}
-		callback(null, toSend);
+	} catch(err) {
+		throw err;
 	}
 }
 
-Inventory.prototype.getUserInventoryContents = function (a, b, c, d, callback) {
-	this.community.getUserInventoryContents(a, b, c, d, (err, ...items) => {
-		if (!err) return callback(null, ...items);
+Inventory.prototype.getAvailableSetsForCustomer = async function (SteamID, Compare = true, CollectorMode = false, MaxSetsToSend = 5) {
+	
+	const ParseSets = async (Badges = {}, MaxToParse = 5, perBadgeLimit = 0) => {
+		let ResultArray = [];
 
-		if (isSteamCommonError(err.message)) {
-			Log.Debug(`Failed to request #${target} inventory, its a steam commom error, so trying again..`, false, config.DebugLogs);
+		const ParseSetsFromArray = async (AppID, Amount = 0) => {
+			let ParsedArray = [];
 
-			setTimeout(() => {
-				this.getUserInventoryContents(...arguments);
-			}, moment.duration(2, 'seconds'));
+			for (let i = 0; i < Amount; i++) {
+				const Sets = this.AvailableSets[AppID][i];
+				ParsedArray.push(...Sets);
+			}
 
-			return;
+			return ParsedArray;
+		};
+
+		for (const AppID in this.AvailableSets) {
+			let CanParse = Math.min(this.AvailableSets[AppID].length, perBadgeLimit);
+			if (Badges.hasOwnProperty(AppID)) CanParse -= Badges[AppID];
+			
+			if (CanParse <= 0) continue;			
+			const Parsed = await ParseSetsFromArray(Math.min(CanParse, MaxToParse));
+			
+			ResultArray.push(...Parsed);
+			MaxToParse -= CanParse;
+
+			if(MaxToParse === 0) break;
 		}
 
-		callback(err);
-	});
+		return ResultArray;
+	};
+
+	if(!Compare) return ParseSets({}, MaxSetsToSend, CollectorMode ? 1 : 5);	
+	const {Badges} = await this.getUserBadges(SteamID, true, CollectorMode);
+	return ParseSets(Badges, MaxSetsToSend, CollectorMode ? 1 : 5);
+}
+
+Inventory.prototype.getUserInventoryContents = function () {
+	return new Promise((resolve, reject) => {
+		this.community.getUserInventoryContents(...arguments, (err, inventory) => {
+			if (err) {
+				if (isSteamCommonError(err.message)) return setTimeout(() => {resolve(this.getUserInventoryContents(...arguments));}, moment.duration(5, 'seconds'));
+				return reject(err);
+			}
+			
+			const o = {
+				Contents: inventory,
+				Count: inventory.length
+			};
+
+			resolve(o);
+		});
+	});	
 }

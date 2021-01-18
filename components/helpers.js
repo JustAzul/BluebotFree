@@ -48,15 +48,17 @@ async function Init(){
 	try {
 		Profits = JSON.parse(readFileSync(`${process.cwd()}/data/profits.json`)) || Profits;
 	} catch (e) {}
-	await LoadLocalCardDatabase();
 
-	setInterval(() => {
-		Log.Debug("Updating card sets Database..", false, DebugLogs);
+	await LoadLocalCardDatabase();
+	await UpdateDatabase();
+
+	setInterval(() => {		
 		UpdateDatabase();
-	}, duration(25, 'hours'));
+	}, duration(12, 'hours'));
 }
 
 async function UpdateDatabase() {
+	Log.Debug("Updating card sets Database..", false, DebugLogs);
 	const FreshDatabase = await RequestDatabase();
 	await storeData("database.json", FreshDatabase, true);
 	Log.Debug(`Database up to date!, Found ${formatNumber(Object.keys(FreshDatabase).length)} apps with cards!`, false, DebugLogs);

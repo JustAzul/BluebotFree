@@ -11,7 +11,7 @@
 
 ,	"SellCheck":"You currently have {amount} sets which i can buy =D, i can pay up to {tfkeys_amount} tf keys for {tfsets_amount} sets"
 ,	"SellCheck_i":"Interested? hehe, type !sell {sell_qty}"
-,	"SellCheck_i2":" !selltf {selltf_qty} for TF2 Key(s)"
+,	"SellCheck_i2":"{breakline} - !selltf {selltf_qty} for TF2 Key(s)"
 
 ,	"Level":"You'll need {needed} sets to reach level {desired_level}, and it'll cost {price_tf} tf2 keys"
 ,	"Level2":"Type !prices to see our prices!"

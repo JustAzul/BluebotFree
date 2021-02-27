@@ -1,8 +1,8 @@
 {
 	"name": "bluebot-free",
-	"version": "1.2.0",
+	"version": "1.2.1",
 	"description": "Blue Cardsets/LevelUp BOT, Free edition.",
-	"main": "./blue.js",
+	"main": "azul.js",
 	"author": "Azul|https://justazul.xyz",
 	"dependencies": {
 		"@doctormckay/stdlib": "^1.10.1",
@@ -11,15 +11,21 @@
 		"got": "^11.8.1",
 		"graceful-fs": "^4.1.15",
 		"moment": "^2.22.1",
+		"steam-totp": "^2.1.1",
 		"steam-tradeoffer-manager": "^2.9.1",
 		"steam-user": "^4.9.1",
 		"steamcommunity": "^3.36.1"
 	},
 	"scripts": {
-		"start": "node blue.js",
-		"debug": "node --expose-gc --inspect=9222 blue.js"
+		"start": "node azul.js",
+		"debug": "node --expose-gc --inspect=9222 azul.js"
 	},
 	"engines": {
-		"node": ">=12.20.1"
+		"node": ">=12.0.0"
+	},
+	"devDependencies": {
+		"eslint": "^7.20.0",
+		"eslint-config-airbnb-base": "^14.2.1",
+		"eslint-plugin-import": "^2.22.1"
 	}
 }

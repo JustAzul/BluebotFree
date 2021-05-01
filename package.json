@@ -5,15 +5,15 @@
 	"main": "azul.js",
 	"author": "Azul|https://justazul.xyz",
 	"dependencies": {
-		"@doctormckay/stdlib": "^1.10.1",
-		"azul-tools": "^1.2.6",
+		"@doctormckay/stdlib": "^1.14.0",
+		"azul-tools": "^1.9.15",
 		"dotenv": "^8.0.0",
-		"got": "^11.8.1",
-		"graceful-fs": "^4.1.15",
+		"got": "^11.8.2",
+		"graceful-fs": "^4.2.6",
 		"moment": "^2.22.1",
 		"steam-totp": "^2.1.1",
-		"steam-tradeoffer-manager": "^2.9.1",
-		"steam-user": "^4.9.1",
+		"steam-tradeoffer-manager": "^2.10.3",
+		"steam-user": "^4.19.4",
 		"steamcommunity": "^3.36.1"
 	},
 	"scripts": {
@@ -24,7 +24,7 @@
 		"node": ">=14.0.0"
 	},
 	"devDependencies": {
-		"eslint": "^7.20.0",
+		"eslint": "^7.25.0",
 		"eslint-config-airbnb-base": "^14.2.1",
 		"eslint-plugin-autofix": "^1.0.4",
 		"eslint-plugin-import": "^2.22.1"

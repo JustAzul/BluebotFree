@@ -9,6 +9,7 @@
         "plugin:import/errors",
         "plugin:import/warnings"
     ],
+    "plugins": ["autofix"],
     "parserOptions": {
         "ecmaVersion": 12
     },

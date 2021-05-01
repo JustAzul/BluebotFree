@@ -4,7 +4,7 @@ const SteamCommunity = require('steamcommunity');
 const TradeOfferManager = require('steam-tradeoffer-manager');
 const { EOL: BR } = require('os');
 const {
-  Log, storeChatData, formatNumber, sleep,
+  Log, storeChatData, formatNumber, sleep, Pattern,
 } = require('azul-tools');
 const helper = require('./components/helpers');
 const Inventory = require('./components/inventory');
@@ -44,6 +44,7 @@ function login() {
 }
 
 (async () => {
+  Pattern();
   Log('Initing handy functions..');
   await helper.Init();
   Log('Initing customer manager..');

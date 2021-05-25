@@ -2,7 +2,7 @@ const { readFileSync } = require('graceful-fs');
 const { duration } = require('moment');
 const { getAuthCode } = require('steam-totp');
 const {
-  Log, storeFile, readJSON, formatNumber,
+  Log, storeFile, readJSON, formatNumber, isSteamID64,
 } = require('azul-tools');
 const { DataStructures } = require('@doctormckay/stdlib');
 const RequestDatabase = require('./RequestDatabase');
@@ -135,8 +135,8 @@ function fixNumber(number, x) {
 
 function isSteamCommonError(ErrorMessage = '', LowerCase = false) {
   if (LowerCase) ErrorMessage = ErrorMessage.toLowerCase();
-  if (ErrorMessage.indexOf('socket hang up') > -1) return true;
-  if (ErrorMessage.indexOf('EBUSY') > -1) return true;
+  if (ErrorMessage.indexOf('socket hang up') !== -1) return true;
+  if (ErrorMessage.indexOf('EBUSY') !== -1) return true;
   if (ErrorMessage === 'ETIMEDOUT') return true;
   if (ErrorMessage === 'ESOCKETTIMEDOUT') return true;
   return false;
@@ -146,6 +146,50 @@ function isAdmin(SteamID64 = '') {
   return AdminList.indexOf(SteamID64) !== -1;
 }
 
+function GetCommandFromMessage(Message = '', RemovePrefix = false) {
+  const SplitValues = Message.split(' ');
+  const Result = SplitValues[0];
+
+  if (RemovePrefix) return Result.replace(/[!]/g, '');
+
+  return Result.toLowerCase();
+}
+
+async function ParseIntegerInputs(Message = '', MinimalInputValue = 0, MaxInputValue = Number.MAX_SAFE_INTEGER) {
+  const SplitValues = Message.split(' ');
+
+  if (SplitValues.length === 2) {
+    const InputValue = parseInt(SplitValues[1], 10);
+
+    if (!InputValue || Number.isNaN(InputValue)) {
+      const ReceivedCommand = SplitValues[0];
+      throw new Error(`Try ${ReceivedCommand} [amount]`);
+    }
+
+    if (InputValue > MaxInputValue) throw new Error(`The amount value should be ${MaxInputValue} or lower`);
+    if (InputValue < MinimalInputValue) throw new Error(`The amount value should be ${MinimalInputValue} or higher.`);
+
+    return InputValue;
+  }
+
+  const ReceivedCommand = SplitValues[0];
+  throw new Error(`Try ${ReceivedCommand} [amount]`);
+}
+
+// Returns SteamID64 if true
+async function isInputSteamID64(Message = '') {
+  const SplitResult = Message.split(' ');
+
+  if (!SplitResult) return false;
+
+  const FirstInput = SplitResult[1];
+  const Result = await isSteamID64(FirstInput);
+
+  if (Result) return FirstInput;
+
+  return false;
+}
+
 module.exports = {
   Init,
 
@@ -153,6 +197,10 @@ module.exports = {
   getLogOn,
 
   isAdmin,
+
+  isInputSteamID64,
+  ParseIntegerInputs,
+  GetCommandFromMessage,
 
   isSteamCommonError,
   ExpForLevel,

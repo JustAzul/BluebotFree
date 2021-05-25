@@ -6,12 +6,14 @@ const { EOL: BR } = require('os');
 const {
   Log, storeChatData, formatNumber, sleep, Pattern,
 } = require('azul-tools');
-const helper = require('./components/helpers');
+const Helper = require('./components/helpers');
 const Inventory = require('./components/inventory');
-const customer = require('./components/userhandler');
+const UserHandler = require('./components/userhandler');
+
 const config = require('./config/main');
 const rates = require('./config/rates.json');
 const msg = require('./config/messages.json');
+const helpers = require('./components/helpers');
 
 require('events').EventEmitter.defaultMaxListeners = 0;
 
@@ -28,27 +30,25 @@ const Manager = new TradeOfferManager({
 
 const inventory = new Inventory(Community, Client);
 
-let didLogin = false;
+let FirstLoginAttemptDone = false;
 const { SellPrice: tfkeySets, BuyPrice: tfkeyBuySets } = rates;
 
 function login() {
   try {
-    if (didLogin) {
-      Client.logOn(true);
-      return;
-    }
-
-    Client.logOn(helper.getLogOn());
+    if (FirstLoginAttemptDone) return Client.logOn(true);
+    Client.logOn(Helper.getLogOn());
     Log('Connecting to Steam..');
-  } catch {}
+  } catch {
+    // Do Nothing..
+  }
 }
 
 (async () => {
   Pattern();
   Log('Initing handy functions..');
-  await helper.Init();
+  await Helper.Init();
   Log('Initing customer manager..');
-  await customer.Init(Client);
+  await UserHandler.Init(Client);
   login();
 })();
 
@@ -79,7 +79,7 @@ Client.once('loggedOn', () => {
 });
 
 Client.on('loggedOn', () => {
-  didLogin = true;
+  FirstLoginAttemptDone = true;
   Client.setPersona(SteamUser.EPersonaState.Online);
   Log('Conecting to SteamCommunity..');
 });
@@ -89,15 +89,15 @@ Client.on('groupRelationship', (GroupID, relationship) => {
 });
 
 Client.on('steamGuard', (domain, callback) => {
-  helper.GenerateSteamGuardToken().then(callback);
+  Helper.GenerateSteamGuardToken().then(callback);
 });
 
-function checkSteamLogged() {
+function CheckSteamLogin() {
   Community.loggedIn((err, loggedIn) => {
-    if (err) return setTimeout(() => checkSteamLogged(), moment.duration(5, 'seconds'));
+    if (err) return setTimeout(() => CheckSteamLogin(), moment.duration(5, 'seconds'));
 
     if (!loggedIn) {
-      Log.Debug('checkSteamLogged(): Session expired!', false, config.DebugLogs);
+      Log.Debug('CheckSteamLogin(): Session expired!', false, config.DebugLogs);
       webLogin();
       return;
     }
@@ -106,7 +106,7 @@ function checkSteamLogged() {
   });
 }
 
-function playPrices() {
+function DisplayPrices() {
   const play = msg.play
     .replace('{have_sets}', formatNumber(inventory.haveSets()))
     .replace('{rate}', `${tfkeySets}:1`);
@@ -118,8 +118,8 @@ function addFriend(user) {
   Client.addFriend(user, (err, result) => {
     if (err) return Log.Warn(`Failed to accept user #${user} friend request!: ${err.message}`);
 
-    customer.Message(user, msg.Welcome.replace('{customer_name}', result));
-    customer.UserInteract(user);
+    UserHandler.sendChatMessage(user, msg.Welcome.replace('{customer_name}', result));
+    UserHandler.UserInteract(user);
   });
 }
 
@@ -132,33 +132,37 @@ function checkFriendRequests() {
   keys = null;
 }
 
-function online() {
+function BotOnlineStatus() {
   Client.setPersona(SteamUser.EPersonaState.LookingToTrade);
-  playPrices();
+  DisplayPrices();
   checkFriendRequests();
 }
 
-function loadmanager(newCookie) {
+function SetupTradeManager(newCookie) {
   Manager.setCookies(newCookie, async (err) => {
     if (err) {
       await sleep(moment.duration(5, 'seconds'));
-      loadmanager(newCookie);
+      SetupTradeManager(newCookie);
       return;
     }
 
-    inventory.apiKey = Manager.apiKey; Community.startConfirmationChecker(1000 * 20, config.identity); if (!inventory.apiKey) {
+    inventory.apiKey = Manager.apiKey;
+
+    Community.startConfirmationChecker(moment.duration(20, 'seconds'), config.identity);
+
+    if (!inventory.apiKey) {
       Log('Successfully loaded API Key!');
-      setInterval(checkSteamLogged, moment.duration(10, 'minutes'));
+      setInterval(CheckSteamLogin, moment.duration(10, 'minutes'));
     }
 
     await inventory.Load();
-    online();
+    BotOnlineStatus();
   });
 }
 
 Client.on('webSession', (sessionID, newCookie) => {
   Log.Debug('webLogOn', false, config.DebugLogs);
-  loadmanager(newCookie);
+  SetupTradeManager(newCookie);
 });
 
 Client.on('disconnected', () => Log('Unexpected Disconnection!'));
@@ -190,7 +194,7 @@ Client.on('error', ({ eresult }) => {
   }
 });
 
-Community.on('sessionExpired', () => webLogin());
+Community.on('sessionExpired', webLogin);
 
 Community.on('confirmationAccepted', (Confirmation) => {
   Log.Debug(`confirmationAccepted #${Confirmation.id} with type ${Confirmation.type} triggered.`, false, config.DebugLogs);
@@ -205,7 +209,7 @@ Community.on('confirmationAccepted', (Confirmation) => {
     if (isOurOffer) {
       let response = msg.OfferSent;
       response += BR + msg.OfferSent2.replace('{url}', `https://steamcommunity.com/tradeoffer/${Confirmation.creator}`);
-      customer.Message(partner, response);
+      UserHandler.sendChatMessage(partner, response);
       Log.Trade(`Successfully sent a trade offer for ${partner}`);
       return;
     }
@@ -241,8 +245,8 @@ function makeOffer(CustomerID, itemsFromMe = [], itemsFromThem = [], details = {
 
     Offer.getUserDetails((UserDetailError, me, them) => {
       if (UserDetailError) {
-        if (UserDetailError.message.toLowerCase().indexOf('is not available to trade. more information will be') > -1) {
-          customer.Message(CustomerID, msg.Trade_error1);
+        if (UserDetailError.message.toLowerCase().indexOf('is not available to trade. more information will be') !== -1) {
+          UserHandler.sendChatMessage(CustomerID, msg.Trade_error1);
           Log.Trade(`#${CustomerID} is unavailable to trade`);
           return;
         }
@@ -250,13 +254,14 @@ function makeOffer(CustomerID, itemsFromMe = [], itemsFromThem = [], details = {
         return Log.Error(UserDetailError.message);
       }
 
-      if ((them.escrowDays + me.escrowDays) > 0) return customer.Message(CustomerID, msg.Trade_hold);
+      const EscrowDays = (them.escrowDays + me.escrowDays);
+      if (EscrowDays > 0) return UserHandler.sendChatMessage(CustomerID, msg.Trade_hold);
 
       Log.Debug(`Sending offer for #${CustomerID}`, false, config.DebugLogs);
       Offer.send((OfferError, OfferStatus) => {
         if (OfferError) {
-          if (OfferError.message.toLowerCase().indexOf('sent too many trade offers') > 1) {
-            customer.Message(CustomerID, msg.Trade_error2);
+          if (OfferError.message.toLowerCase().indexOf('sent too many trade offers') !== -1) {
+            UserHandler.sendChatMessage(CustomerID, msg.Trade_error2);
             return;
           }
 
@@ -266,7 +271,7 @@ function makeOffer(CustomerID, itemsFromMe = [], itemsFromThem = [], details = {
         Manager.getOffer(Offer.id, (err /* , myOffer */) => {
           if (err) {
             Log.Error(err.message);
-            if (helper.isSteamCommonError(err.message)) webLogin();
+            if (Helper.isSteamCommonError(err.message)) webLogin();
             throw err;
           }
 
@@ -274,51 +279,50 @@ function makeOffer(CustomerID, itemsFromMe = [], itemsFromThem = [], details = {
 
           let response = msg.OfferSent;
           response += BR + msg.OfferSent2.replace('{url}', `https://steamcommunity.com/tradeoffer/${Offer.id}`);
-          customer.Message(CustomerID, response);
+          UserHandler.sendChatMessage(CustomerID, response);
           Log.Trade(`Successfully sent a trade offer for ${CustomerID}`);
         });
       });
     });
   } catch (e) {
-    customer.Message(CustomerID, msg.Trade_error);
+    UserHandler.sendChatMessage(CustomerID, msg.Trade_error);
   }
 }
 
 Manager.on('newOffer', (Offer) => {
-  const partner = Offer.partner.getSteamID64();
-  if (config.admin.indexOf(partner) > -1) {
-    Log.Trade(`New offer from admin #${partner}`);
-    Offer.accept((err, res) => {
-      if (err) return Log.Warn(`Unable to accept admin offer: ${err.message}`);
+  const PartnerID64 = Offer.partner.getSteamID64();
 
-      if (res === 'pending') {
-        Log.Trade('Accepting admin offer..');
-        Community.checkConfirmations();
-      } else {
-        Log.Trade('Admin Offer accepeted!');
-      }
-    });
-  }
+  if (!helpers.isAdmin(PartnerID64)) return;
+
+  Log.Trade(`New offer from admin #${PartnerID64}`);
+  Offer.accept((err, res) => {
+    if (err) return Log.Warn(`Unable to accept admin offer: ${err.message}`);
+
+    if (res === 'pending') {
+      Log.Trade('Accepting admin offer..');
+      Community.checkConfirmations();
+    } else Log.Trade('Admin Offer accepeted!');
+  });
 });
 
 Manager.on('receivedOfferChanged', async ({ id, state }) => {
-  if (helper.isTradeOfferRepeated(id)) return;
+  if (Helper.isTradeOfferRepeated(id)) return;
   if (state !== TradeOfferManager.ETradeOfferState.Accepted) return;
 
-  helper.newTradeOfferFinished(id);
+  Helper.newTradeOfferFinished(id);
   await inventory.Load(true);
-  playPrices();
+  DisplayPrices();
   Client.setPersona(SteamUser.EPersonaState.LookingToTrade);
 });
 
 async function postComment(Target, Comment = '') {
-  const Target64 = typeof Target.getSteamID64 === 'function' ? Target.getSteamID64() : Target;
-  if (!(await customer.canComment(Target64))) return null;
+  const TargetID64 = typeof Target.getSteamID64 === 'function' ? Target.getSteamID64() : Target;
+  if (!(await UserHandler.canComment(TargetID64))) return null;
 
   return new Promise((resolve) => {
     Community.postUserComment(Target, Comment, (err) => {
       if (!err) {
-        customer.UserInteract(Target64, true);
+        UserHandler.UserInteract(TargetID64, true);
         resolve();
         return;
       }
@@ -330,56 +334,56 @@ async function postComment(Target, Comment = '') {
 }
 
 Manager.on('sentOfferChanged', async (Offer) => {
-  if (helper.isTradeOfferRepeated(Offer.id)) return;
+  if (Helper.isTradeOfferRepeated(Offer.id)) return;
   if (Offer.state !== TradeOfferManager.ETradeOfferState.Accepted) return;
 
-  helper.newTradeOfferFinished(Offer.id);
+  Helper.newTradeOfferFinished(Offer.id);
 
   await inventory.Load(true);
-  playPrices();
+  DisplayPrices();
   Client.setPersona(SteamUser.EPersonaState.LookingToTrade);
 
   if (config.ThanksM && Offer.data('SellInfo') !== 'admin') {
     postComment(Offer.partner, config.ThanksM);
-    customer.Message(Offer.partner, msg.Thanks);
+    UserHandler.sendChatMessage(Offer.partner, msg.Thanks);
   }
 
   if (Offer.data('SellInfoType') != null) {
-    const _sets = parseInt(Offer.data('SellInfo').split(':')[0], 10);
-    const _currency = parseInt(Offer.data('SellInfo').split(':')[1], 10);
+    const SetsSent = parseInt(Offer.data('SellInfo').split(':')[0], 10);
+    const ReceivedCurrencyAmount = parseInt(Offer.data('SellInfo').split(':')[1], 10);
 
-    helper.UpdateProfits(Offer.data('SellInfoType'), Offer.data('SellInfoCurrency'), _sets, _currency);
+    Helper.UpdateProfits(Offer.data('SellInfoType'), Offer.data('SellInfoCurrency'), SetsSent, ReceivedCurrencyAmount);
 
-    const text = `#${Offer.partner.getSteamID64()} have accepted an trade offer!, i have ${Offer.data('SellInfoType') === 0 ? 'selled' : 'buyed'} ${_sets} set(s) for ${_currency} ${Offer.data('SellInfoCurrency')}!`;
+    const text = `#${Offer.partner.getSteamID64()} have accepted an trade offer!, i have ${Offer.data('SellInfoType') === 0 ? 'sold' : 'bought'} ${SetsSent} set(s) for ${ReceivedCurrencyAmount} ${Offer.data('SellInfoCurrency')}!`;
     Log.Trade(text);
 
-    if (config.sellmsgs) customer.sendAdminMessages(text);
+    if (config.sellmsgs) UserHandler.sendAdminMessages(text);
   }
 });
 
 function handleInventoryErrors(err, target) {
-  if (err.message.indexOf('profile is private') > -1) customer.Message(target, msg.Inventory_priv);
+  if (err.message.indexOf('profile is private') !== -1) UserHandler.sendChatMessage(target, msg.Inventory_priv);
   else {
     Log.Error(err.message);
-    customer.Message(target, msg.Inventory_error);
+    UserHandler.sendChatMessage(target, msg.Inventory_error);
   }
 }
 
 function handleBadgeErrors(err, source) {
-  if (err.message === 'empty') customer.Message(source, "I can't look at your badges if your profile is private, can you make it public for me? ty ^^");
+  if (err.message === 'empty') UserHandler.sendChatMessage(source, "I can't look at your badges if your profile is private, can you make it public for me? ty ^^");
   else {
     Log.Error(err.message);
-    customer.Message(source, msg.Badge_error);
+    UserHandler.sendChatMessage(source, msg.Badge_error);
   }
 }
 
 async function check(CustomerID) {
-  customer.Message(CustomerID, msg.CustomerRequest);
+  UserHandler.sendChatMessage(CustomerID, msg.CustomerRequest);
 
   if (inventory.haveSets() <= 0) {
     let response = msg.Donthave;
     if (inventory.HaveKeys() && config.enableSell) response += BR + msg.Sell_keys;
-    customer.Message(CustomerID, response);
+    UserHandler.sendChatMessage(CustomerID, response);
     return;
   }
 
@@ -397,7 +401,7 @@ async function check(CustomerID) {
     if (Qty <= 0) {
       let response = msg.Donthave;
       if (inventory.HaveKeys() && config.enableSell) response += BR + msg.Sell_keys;
-      customer.Message(CustomerID, response);
+      UserHandler.sendChatMessage(CustomerID, response);
       return;
     }
 
@@ -406,14 +410,14 @@ async function check(CustomerID) {
       .replace('{tf_price}', ((Qty / tfkeySets)).toFixed(1));
 
     response += msg.Check_i.replace('{buytf_qty}', parseInt(Qty / tfkeySets, 10));
-    customer.Message(CustomerID, response);
+    UserHandler.sendChatMessage(CustomerID, response);
   } catch (err) {
     handleBadgeErrors(err, CustomerID);
   }
 }
 
 async function Buy(CustomerID, KeysAmount = 0, Compare = true, CollectorMode = false) {
-  customer.Message(CustomerID, msg.CustomerRequest);
+  UserHandler.sendChatMessage(CustomerID, msg.CustomerRequest);
 
   const CustomerKeys = {
     Assets: [],
@@ -427,14 +431,14 @@ async function Buy(CustomerID, KeysAmount = 0, Compare = true, CollectorMode = f
     handleInventoryErrors(err, CustomerID);
   }
 
-  if (CustomerKeys.Amount <= 0) return customer.Message(CustomerID, msg.Sorrythem2.replace('{currency_name}', 'tf keys'));
-  if (CustomerKeys.Amount <= KeysAmount) return customer.Message(CustomerID, msg.them_need.replace('{currency_qty}', CustomerKeys.Amount).replace('{currency}', 'tf keys').replace('{needed}', KeysAmount));
+  if (CustomerKeys.Amount <= 0) return UserHandler.sendChatMessage(CustomerID, msg.Sorrythem2.replace('{currency_name}', 'tf keys'));
+  if (CustomerKeys.Amount <= KeysAmount) return UserHandler.sendChatMessage(CustomerID, msg.them_need.replace('{currency_qty}', CustomerKeys.Amount).replace('{currency}', 'tf keys').replace('{needed}', KeysAmount));
 
   const NeededBotSets = tfkeySets * KeysAmount;
 
   try {
     const toSend = await inventory.getAvailableSetsForCustomer(CustomerID, Compare, CollectorMode, NeededBotSets);
-    if (toSend.length !== NeededBotSets) return customer.Message(CustomerID, msg.i_need.replace('{currency_qty}', toSend.length).replace('{currency}', 'sets').replace('{needed}', NeededBotSets));
+    if (toSend.length !== NeededBotSets) return UserHandler.sendChatMessage(CustomerID, msg.i_need.replace('{currency_qty}', toSend.length).replace('{currency}', 'sets').replace('{needed}', NeededBotSets));
 
     const toReceive = await inventory.getToOfferKeys(CustomerKeys.Assets, KeysAmount);
     makeOffer(CustomerID, toSend, toReceive, `${NeededBotSets}:${KeysAmount}`, 0, 'tf key(s)');
@@ -444,7 +448,7 @@ async function Buy(CustomerID, KeysAmount = 0, Compare = true, CollectorMode = f
 }
 
 async function CheckAmount(CustomerID, Amount) {
-  customer.Message(CustomerID, msg.CustomerRequest);
+  UserHandler.sendChatMessage(CustomerID, msg.CustomerRequest);
 
   try {
     const { player_level: PlayerLevel, player_xp: PlayerXP } = await inventory.getUserBadges(CustomerID, false, false);
@@ -462,11 +466,11 @@ async function CheckAmount(CustomerID, Amount) {
       if (Level > config.maxLevelComm) {
         let response = `I'm not allowed to calculate level above than ${Level} :/`;
         response += `${BR}Sorry but can you try a lower level?`;
-        customer.Message(CustomerID, response);
+        UserHandler.sendChatMessage(CustomerID, response);
         break;
       }
 
-      CurrentExp = await helper.ExpForLevel(Level);
+      CurrentExp = await Helper.ExpForLevel(Level);
     } while (CurrentExp <= totalExp);
 
     Level--;
@@ -484,26 +488,26 @@ async function CheckAmount(CustomerID, Amount) {
 
 async function Sell(source, KeysToSend) {
   const BotKeysAmount = inventory.HaveKeys();
-  if (!BotKeysAmount) return customer.Message(source, msg.Sorryme2);
+  if (!BotKeysAmount) return UserHandler.sendChatMessage(source, msg.Sorryme2);
 
   if (BotKeysAmount < KeysToSend) {
-    customer.Message(source, msg.i_need
+    UserHandler.sendChatMessage(source, msg.i_need
       .replace('{currency_qty}', BotKeysAmount)
       .replace('{currency}', 'tf keys')
       .replace('{needed}', KeysToSend));
     return;
   }
 
-  customer.Message(source, msg.CustomerRequest);
+  UserHandler.sendChatMessage(source, msg.CustomerRequest);
 
   try {
     const CustomerSetsArray = await inventory.getCustomerSets(source, false);
     const SetsRequestAmount = parseInt((KeysToSend) * tfkeyBuySets, 10);
 
-    if (CustomerSetsArray.length <= 0) return customer.Message(source, msg.ThemDonthave);
-    if (CustomerSetsArray.length < SetsRequestAmount) return customer.Message(source, msg.them_need.replace('{currency_qty}', +CustomerSetsArray.length).replace('{currency}', 'sets').replace('{needed}', SetsRequestAmount));
+    if (CustomerSetsArray.length <= 0) return UserHandler.sendChatMessage(source, msg.ThemDonthave);
+    if (CustomerSetsArray.length < SetsRequestAmount) return UserHandler.sendChatMessage(source, msg.them_need.replace('{currency_qty}', +CustomerSetsArray.length).replace('{currency}', 'sets').replace('{needed}', SetsRequestAmount));
 
-    customer.Message(source, msg.SendingOffer);
+    UserHandler.sendChatMessage(source, msg.SendingOffer);
 
     inventory.getToOfferSets(CustomerSetsArray, SetsRequestAmount, async (toRequest) => {
       const toSend = await inventory.getToOffer_TF_Keys(KeysToSend);
@@ -515,13 +519,13 @@ async function Sell(source, KeysToSend) {
 }
 
 async function sellcheck(source) {
-  customer.Message(source, msg.CustomerRequest);
+  UserHandler.sendChatMessage(source, msg.CustomerRequest);
 
   try {
     const CustomerSetsArray = await inventory.getCustomerSets(source, false);
 
     const CustomerSetsAmount = CustomerSetsArray.length;
-    if (CustomerSetsAmount <= 0) return customer.Message(source, msg.ThemDonthave);
+    if (CustomerSetsAmount <= 0) return UserHandler.sendChatMessage(source, msg.ThemDonthave);
 
     let response = msg.SellCheck.replace('{amount}', CustomerSetsAmount)
       .replace('{tfkeys_amount}', parseInt((CustomerSetsAmount / tfkeyBuySets), 10))
@@ -529,52 +533,49 @@ async function sellcheck(source) {
 
     response += msg.SellCheck_i2.replace('{selltf_qty}', parseInt((CustomerSetsAmount / tfkeyBuySets), 10));
 
-    customer.Message(source, response);
+    UserHandler.sendChatMessage(source, response);
   } catch (err) {
     handleInventoryErrors(err, source);
   }
 }
 
 function block(admin, target) {
-  if (config.admin.indexOf(target) > -1) {
-    customer.Message(admin, 'You can\'t block this user!');
-  } else {
-    Client.blockUser(target, (err) => {
-      if (err) return customer.Message(admin, 'Fail!, did you put the right SteamID64 ??');
-      customer.Message(admin, `Successfully blocked user ${target} !`);
-    });
+  if (Helper.isAdmin(admin)) {
+    UserHandler.sendChatMessage(admin, 'You can\'t block this user!');
+    return;
   }
+
+  Client.blockUser(target, (err) => {
+    if (err) return UserHandler.sendChatMessage(admin, 'Fail!, did you put the right SteamID64 ??');
+    UserHandler.sendChatMessage(admin, `Successfully blocked user ${target} !`);
+  });
 }
 
 function unblock(admin, target) {
-  if (config.admin.indexOf(target) > -1) {
-    customer.Message(admin, `${BR}You can't unblock this user!`);
-  } else {
-    Client.unblockUser(target, (err) => {
-      if (err) return customer.Message(admin, 'Fail!, did you put the right SteamID64 ??');
-      customer.Message(admin, `Successfully unblocked user ${target} !`);
-    });
-  }
+  Client.unblockUser(target, (err) => {
+    if (err) return UserHandler.sendChatMessage(admin, 'Fail!, did you put the right SteamID64 ??');
+    UserHandler.sendChatMessage(admin, `Successfully unblocked user ${target} !`);
+  });
 }
 
 function stats(source) {
   const response = `I currently have ${formatNumber(inventory.haveSets())} sets and ${inventory.HaveKeys()} Tf key(s) on my inventory.`;
-  customer.Message(source, response);
+  UserHandler.sendChatMessage(source, response);
 }
 
-function _profit(admin) {
-  const profit = helper.getProfits();
+function TradingCounts(admin) {
+  const profit = Helper.getProfits();
 
-  let response = '- I have sold ';
-  response += `${formatNumber(profit.tf2.sell.sets)} sets for ${formatNumber(profit.tf2.sell.currency)} Tf keys`;
+  let Response = '- I have sold ';
+  Response += `${formatNumber(profit.tf2.sell.sets)} sets for ${formatNumber(profit.tf2.sell.currency)} Tf keys`;
 
-  response += `${BR}- I bought `;
-  response += `${formatNumber(profit.tf2.buy.sets)} sets for ${formatNumber(profit.tf2.buy.currency)} Tf keys`;
+  Response += `${BR}- I bought `;
+  Response += `${formatNumber(profit.tf2.buy.sets)} sets for ${formatNumber(profit.tf2.buy.currency)} Tf keys`;
 
-  customer.Message(admin, response);
+  UserHandler.sendChatMessage(admin, Response);
 }
 
-async function dev(CustomerId) {
+function dev(CustomerId) {
   Client.inviteToGroup(CustomerId, '103582791458759521');
   let Response = 'This bot was developed by Azul.';
   Response += '{breakline}- If you want anything like code service, please contact me so we can chat :)';
@@ -586,33 +587,33 @@ async function dev(CustomerId) {
 }
 
 async function level(source, DesiredLevel = 0) {
-  customer.Message(source, msg.CustomerRequest);
+  UserHandler.sendChatMessage(source, msg.CustomerRequest);
 
   try {
     const { player_level: PlayerLevel, player_xp: PlayerXP } = await inventory.getUserBadges(source, false, false);
 
-    if (DesiredLevel < PlayerLevel) return customer.Message(source, `You've already reached level ${DesiredLevel}!!`);
+    if (DesiredLevel < PlayerLevel) return UserHandler.sendChatMessage(source, `You've already reached level ${DesiredLevel}!!`);
 
-    const needed = Math.ceil(((await helper.ExpForLevel(parseInt(DesiredLevel, 10))) - PlayerXP) / 100);
+    const needed = Math.ceil(((await Helper.ExpForLevel(parseInt(DesiredLevel, 10))) - PlayerXP) / 100);
 
     let response = msg.Level
       .replace('{needed}', needed).replace('{desired_level}', DesiredLevel)
       .replace('{price_tf}', ((needed / tfkeySets)).toFixed(1));
 
     response += BR + msg.Level2;
-    customer.Message(source, response);
+    UserHandler.sendChatMessage(source, response);
   } catch (err) {
     handleBadgeErrors(err, source);
   }
 }
 
-function restart_() {
+function SteamReconnect() {
   Log('Restarting..');
   if (!Client.steamID) return login();
   Client.relog();
 }
 
-function shutdown() {
+function ShutdownApp() {
   Log('Shutdown requested, bye..');
 
   try {
@@ -625,172 +626,238 @@ function shutdown() {
   setTimeout(() => process.exit(1), 1500);
 }
 
-function parseInputs(message, target, min, callback, max) {
-  const qty = parseInt(message.split(' ')[1], 10);
-  const isNumber = !(Number.isNaN(qty));
-
-  if (isNumber) {
-    if (!(qty >= min)) {
-      customer.Message(target, `The amount value should be ${min} or higher.`);
-      callback(0);
-    } else if (max && qty > max) {
-      customer.Message(target, `The amount value should be ${max} or lower`);
-      callback(0);
-    } else callback(qty);
-  } else {
-    customer.Message(target, `Try ${message.split(' ')[0]} [amount]`);
-    callback(0);
-  }
-}
-
-function isId64(message, target, callback) {
-  const sid = message.split(' ')[1];
-
-  if (/[0-9]{17}/.test(sid)) callback(sid);
-  else {
-    customer.Message(target, `Try ${message.split(' ')[0]} [SteamId64]`);
-    callback(0);
-  }
-}
-
 Client.chat.on('friendMessage', async ({ steamid_friend: source, server_timestamp: ServerTimeStamp, message_no_bbcode: message }) => {
-  if (message.indexOf('[tradeoffer sender=') > -1) return; // we don't need to handle that
-  storeChatData(source, message, false, ServerTimeStamp);
+  if (message.indexOf('[tradeoffer sender=') !== -1) return; // we don't need to handle that
 
-  if (await customer.checkSpam(source, ServerTimeStamp) === true) {
-    customer.WarnUser(source);
-    const UserWarns = customer.getUserWarns(source);
+  const SouceID64 = typeof source.getSteamID64 === 'function' ? source.getSteamID64() : source;
+  storeChatData(SouceID64, message, false, ServerTimeStamp);
 
-    if (UserWarns === 1) return customer.Message(source, msg.SpamWarn1);
-    if (UserWarns === 2) return customer.Message(source, msg.SpamWarn2);
+  if (await UserHandler.checkSpam(SouceID64, ServerTimeStamp) === true) {
+    UserHandler.WarnUser(SouceID64);
+    const UserWarns = UserHandler.getUserWarns(SouceID64);
+
+    if (UserWarns === 1) return UserHandler.sendChatMessage(source, msg.SpamWarn1);
+    if (UserWarns === 2) return UserHandler.sendChatMessage(source, msg.SpamWarn2);
 
     if (UserWarns <= 5) {
-      customer.Message(source, msg.SpamWarn3);
-      customer.sendAdminMessages(`User #${source} has sending to much messages and have been removed from bot friendlist!`);
-      Log.Warn(`User #${source} has sending to much messages and have been removed from bot friendlist!`);
+      UserHandler.sendChatMessage(source, msg.SpamWarn3);
+      UserHandler.sendAdminMessages(`User #${SouceID64} has sending to much messages and have been removed from bot friendlist!`);
+      Log.Warn(`User #${SouceID64} has sending to much messages and have been removed from bot friendlist!`);
 
       Client.removeFriend(source);
       return;
     }
   }
 
-  customer.UserInteract(source);
+  UserHandler.UserInteract(SouceID64);
   const m = message.toLowerCase();
 
-  if (inventory.CumulativeLoads) {
-    if (m.indexOf('!buy') > -1 || m.indexOf('!sell') > -1 || m.indexOf('!gemswithdraw') > -1 || m.indexOf('!withdraw') > -1 || m.indexOf('!deposit') > -1 || m.indexOf('!tfdeposit') > -1 || m.indexOf('!tfwithdraw') > -1) {
-      return customer.Message(source, msg.Loading);
-    }
+  if (inventory.CumulativeLoads > 0) {
+    const CommandList = ['!buy', '!sell', '!gemswithdraw', '!withdraw', '!deposit', '!tfdeposit', '!tfwithdraw'];
+    const ReceivedCommand = Helper.GetCommandFromMessage(message, false);
+    if (CommandList.indexOf(ReceivedCommand) !== -1) return UserHandler.sendChatMessage(source, msg.Loading);
   }
 
-  if (m === '!help' || m === '!commands ') {
-    let response = 'Commands:';
-    response += `${BR}!owner - show my owner profile, if you have any problems you may contact me!`;
-    response += `${BR}!stats - show current bot amount of currencies`;
-    response += `${BR}!prices to see our prices`;
-    response += BR;
-    response += `${BR}!level [your dream level] - calculate how many sets and how many keys it'll cost to desired level`;
-    response += `${BR}!check - show how many sets the bot have available and how much you can craft`;
-    response += `${BR}!check [amount] - show how many sets and which level you would reach for a specific amount of keys`;
-    response += BR;
-    response += `${BR}!buy [amount of Tf keys] - use to buy that amount of Tf keys for sets you dont have, following the current BOT rate`;
-    response += `${BR}!buyany [amount of Tf keys] - use to buy that amount of Tf keys for any sets, following the current BOT rate`;
-    response += `${BR}!buyone [amount of Tf keys] - use this if you are a badge collector. BOT will send only one set of each game, following the current BOT rate`;
+  const Commands = {
+    Customer: {
+      commands: () => {
+        let Response = 'Commands:';
 
-    response += BR;
-    if (config.enableSell) {
-      response += `${BR}!sell [amount of Tf keys] - sell your sets for TfKey(s)`;
-      response += `${BR}!sellcheck - show information about the set(s) you can sell`;
-    }
-    customer.Message(source, response);
-  } else if (m === '!dev' || m === '!proof' || m === '!developer' || m === '!azul') {
-    customer.Message(source, await dev(source));
-  } else if (m.indexOf('!check') > -1) {
-    if (m.split(' ')[1]) {
-      parseInputs(message, source, 1, async (inputs) => {
-        if (inputs) {
-          const { CustomerLevel, NewLevel } = await CheckAmount(source, inputs);
+        Response += `${BR}!owner - show my owner profile, if you have any problems you may contact me!`;
+        Response += `${BR}!stats - show current bot amount of currencies`;
+        Response += `${BR}!prices to see our prices`;
+        Response += BR;
+        Response += `${BR}!level [your dream level] - calculate how many sets and how many keys it'll cost to desired level`;
+        Response += `${BR}!check - show how many sets the bot have available and how much you can craft`;
+        Response += `${BR}!check [amount] - show how many sets and which level you would reach for a specific amount of keys`;
+        Response += BR;
+        Response += `${BR}!buy [amount of Tf keys] - use to buy that amount of Tf keys for sets you dont have, following the current BOT rate`;
+        Response += `${BR}!buyany [amount of Tf keys] - use to buy that amount of Tf keys for any sets, following the current BOT rate`;
+        Response += `${BR}!buyone [amount of Tf keys] - use this if you are a badge collector. BOT will send only one set of each game, following the current BOT rate`;
+
+        Response += BR;
+
+        if (config.enableSell) {
+          Response += `${BR}!sell [amount of Tf keys] - sell your sets for TfKey(s)`;
+          Response += `${BR}!sellcheck - show information about the set(s) you can sell`;
+        }
+
+        UserHandler.sendChatMessage(source, Response);
+      },
+      developer: () => UserHandler.sendChatMessage(source, dev(source)),
+      stats: () => stats(SouceID64),
+      check: async () => {
+        const HasInputs = (m.split(' ') || []).length > 0;
+
+        if (HasInputs) {
+          let InputValue;
+
+          try {
+            InputValue = await Helper.ParseIntegerInputs(message, 1, config.maxTradeKeys);
+          } catch (e) {
+            UserHandler.sendChatMessage(source, e.message);
+            return;
+          }
+
+          const { CustomerLevel, NewLevel } = await CheckAmount(source, InputValue);
+
           if (CustomerLevel !== NewLevel) {
-            customer.Message(source, `With ${inputs} tf2 key(s) you'll get ${parseInt(inputs, 10) * tfkeySets} set(s) and reach level ${NewLevel}, interested? try !buy ${parseInt(inputs, 10)}`);
+            UserHandler.sendChatMessage(source, `With ${InputValue} tf2 key(s) you'll get ${parseInt(InputValue, 10) * tfkeySets} set(s) and reach level ${NewLevel}, interested? try !buy ${parseInt(InputValue, 10)}`);
           } else {
-            customer.Message(source, `With ${inputs} tf2 key(s) you'll get ${parseInt(inputs, 10) * tfkeySets} set(s) but'll stay on level ${CustomerLevel}, interested? try !buy ${parseInt(inputs, 10)}`);
+            UserHandler.sendChatMessage(source, `With ${InputValue} tf2 key(s) you'll get ${parseInt(InputValue, 10) * tfkeySets} set(s) but'll stay on level ${CustomerLevel}, interested? try !buy ${parseInt(InputValue, 10)}`);
           }
         }
-      }, config.maxTradeKeys);
-    } else {
-      check(source);
-    }
-  } else if (m === '!prices' || m === '!price' || m === '!rate' || m === '!rates') {
-    let response = `The currently prices are ${tfkeySets} set(s) for a tf Key, also we're buying ${tfkeyBuySets} sets for 1 Tf Key`;
-    response += BR;
-    response += `${BR}Type !help for more information!`;
-    customer.Message(source, response);
-  } else if (m.indexOf('!level') > -1) {
-    parseInputs(message, source, 1, (inputs) => {
-      if (inputs) level(source, inputs);
-    }, config.maxLevelComm);
-  } else if (m.indexOf('!buy') > -1) {
-    parseInputs(message, source, 1, (inputs) => {
-      if (inputs) Buy(source, inputs, true, false);
-    }, config.maxTradeKeys);
-  } else if (m.indexOf('!buyone') > -1) {
-    parseInputs(message, source, 1, (inputs) => {
-      if (inputs) Buy(source, inputs, true, true);
-    }, config.maxTradeKeys);
-  } else if (m.indexOf('!buyany') > -1) {
-    parseInputs(message, source, 1, (inputs) => {
-      if (inputs) Buy(source, inputs, false, false);
-    }, config.maxTradeKeys);
-  } else if (m.indexOf('!sellcheck') > -1 && config.enableSell) {
-    sellcheck(source);
-  } else if (m.indexOf('!sell') > -1 && config.enableSell) {
-    parseInputs(message, source, 1, (inputs) => {
-      if (inputs) Sell(source, inputs);
-    }, config.maxTradeKeys);
-  } else if (m === '!owner') {
-    let response = 'There is something wrong?';
-    response += `${BR}Let me know if you're experiencing issues with my bot!`;
 
-    config.admin.forEach((target) => {
-      response += `${BR}https://steamcommunity.com/profiles/${target}`;
-    });
+        check(source);
+      },
+      rates: () => {
+        let Response = `The currently prices are ${tfkeySets} set(s) for a tf Key, also we're buying ${tfkeyBuySets} sets for 1 Tf Key`;
+        Response += BR;
+        Response += `${BR}Type !help for more information!`;
+        UserHandler.sendChatMessage(source, Response);
+      },
+      level: async () => {
+        let InputValue;
 
-    customer.Message(source, response);
-  } else if (m === '!stats') {
-    stats(source);
-  } else if (config.admin.indexOf(source.getSteamID64()) > -1) {
-    if (m === '!admin') {
-      let response = 'Admin Commands:';
-      response += `${BR}!block [SteamID64] - block user`;
-      response += `${BR}!unblock [SteamID64] - unblock user`;
-      response += BR;
-      response += `${BR}!profit - show bot buys and sells`;
-      response += BR;
-      response += `${BR}!restart - restart the bot(logoff and login)`;
-      response += `${BR}!shutdown - logoff bot and close application`;
-      customer.Message(source, response);
-    } else if (m === '!profit') {
-      _profit(source);
-    } else if (m.indexOf('!block') > -1) {
-      isId64(message, source, (sid) => {
-        if (sid) block(source, sid);
-      });
-    } else if (m.indexOf('!unblock') > -1) {
-      isId64(message, source, (sid) => {
-        if (sid) unblock(source, sid);
-      });
-    } else if (m === '!restart') {
-      customer.Message(source, "I'll be back in a minute!");
-      restart_();
-    } else if (m === '!shutdown') {
-      customer.Message(source, 'I going down :(');
-      shutdown();
-    } else {
-      customer.Message(source, msg.UnknowAdmin);
-    }
-  } else {
-    customer.Message(source, msg.Unknow);
+        try {
+          InputValue = await Helper.ParseIntegerInputs(message, 1, config.maxLevelComm);
+        } catch (e) {
+          UserHandler.sendChatMessage(source, e.message);
+          return;
+        }
+
+        level(source, InputValue);
+      },
+      owner: () => {
+        let Response = 'There is something wrong?';
+        Response += `${BR}Let me know if you're experiencing issues with my bot!`;
+
+        for (let i = 0; i < config.admin.length; i += 1) {
+          const AdminID64 = config.admin[i];
+          Response += `${BR}https://steamcommunity.com/profiles/${AdminID64}`;
+        }
+
+        UserHandler.sendChatMessage(source, Response);
+      },
+      buy: async () => {
+        let InputValue;
+
+        try {
+          InputValue = await Helper.ParseIntegerInputs(message, 1, config.maxTradeKeys);
+        } catch (e) {
+          UserHandler.sendChatMessage(source, e.message);
+          return;
+        }
+
+        Buy(source, InputValue, true, false);
+      },
+      buyone: async () => {
+        let InputValue;
+
+        try {
+          InputValue = await Helper.ParseIntegerInputs(message, 1, config.maxTradeKeys);
+        } catch (e) {
+          UserHandler.sendChatMessage(source, e.message);
+          return;
+        }
+
+        Buy(source, InputValue, true, true);
+      },
+      buyany: async () => {
+        let InputValue;
+
+        try {
+          InputValue = await Helper.ParseIntegerInputs(message, 1, config.maxTradeKeys);
+        } catch (e) {
+          UserHandler.sendChatMessage(source, e.message);
+          return;
+        }
+
+        Buy(source, InputValue, false, false);
+      },
+    },
+    Admin: {
+      admin: () => {
+        let Response = 'Admin Commands:';
+
+        Response += `${BR}!block [SteamID64] - block user`;
+        Response += `${BR}!unblock [SteamID64] - unblock user`;
+        Response += BR;
+        Response += `${BR}!profit - show bot buys and sells`;
+        Response += BR;
+        Response += `${BR}!restart - restart the bot(logoff and login)`;
+        Response += `${BR}!shutdown - logoff bot and close application`;
+
+        UserHandler.sendChatMessage(source, Response);
+      },
+      profits: () => TradingCounts(source),
+      shutdown: () => {
+        UserHandler.sendChatMessage(source, 'I going down :(');
+        ShutdownApp();
+      },
+      restart: () => {
+        UserHandler.sendChatMessage(source, "I'll be back in a minute!");
+        SteamReconnect();
+      },
+      block: async () => {
+        const SteamID64 = await Helper.isInputSteamID64(message, source);
+        if (SteamID64) block(source, SteamID64);
+        else UserHandler.sendChatMessage(source, 'Wrong format, model: !block [SteamID64]');
+      },
+      unblock: async () => {
+        const SteamID64 = await Helper.isInputSteamID64(message, source);
+        if (SteamID64) unblock(source, SteamID64);
+        else UserHandler.sendChatMessage(source, 'Wrong format, model: !unblock [SteamID64]');
+      },
+    },
+  };
+
+  if (config.enableSell) {
+    Commands.Customer.sell = async () => {
+      let InputValue;
+
+      try {
+        InputValue = await Helper.ParseIntegerInputs(message, 1, config.maxTradeKeys);
+      } catch (e) {
+        UserHandler.sendChatMessage(source, e.message);
+        return;
+      }
+
+      Sell(source, InputValue);
+    };
+
+    Commands.Customer.sellcheck = () => sellcheck(source);
   }
+
+  const Alias = {
+    Customer: {
+      help: Commands.Customer.commands,
+      azul: Commands.Customer.developer,
+      proof: Commands.Customer.developer,
+      dev: Commands.Customer.developer,
+      prices: Commands.Customer.rates,
+      price: Commands.Customer.rates,
+      rate: Commands.Customer.rates,
+    },
+    /* Admin: {
+
+    }, */
+  };
+
+  const ReceivedCommand = Helper.GetCommandFromMessage(message, true);
+
+  if (Object.prototype.hasOwnProperty.call(Commands.Customer, `${ReceivedCommand}`)) return Commands.Customer[ReceivedCommand]();
+  if (Object.prototype.hasOwnProperty.call(Alias.Customer, ReceivedCommand)) return Alias.Customer[ReceivedCommand]();
+
+  if (Helper.isAdmin(SouceID64)) {
+    if (Object.prototype.hasOwnProperty.call(Commands.Admin, ReceivedCommand)) return Commands.Admin[ReceivedCommand]();
+
+    // We dont have any Admin alias, no need to check.
+    // if (Object.prototype.hasOwnProperty.call(Alias.Admin, ReceivedCommand)) return Alias.Admin[ReceivedCommand]();
+    return UserHandler.sendChatMessage(source, msg.UnknowAdmin);
+  }
+
+  UserHandler.sendChatMessage(source, msg.Unknow);
 });
 
 Client.on('friendRelationship', (steamid, relationship) => {

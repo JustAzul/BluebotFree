@@ -4,7 +4,7 @@ const moment = require('moment');
 const { Log, storeChatData, sleep } = require('azul-tools');
 const { EOL: breakline } = require('os');
 const config = require('../config/main');
-const { Now } = require('./helpers');
+const { Now, isAdmin } = require('./helpers');
 
 let client;
 
@@ -18,7 +18,7 @@ function setup(_client) {
   client = _client;
 }
 
-async function Message(steamid, msg) {
+async function sendChatMessage(steamid, msg) {
   msg = msg.length > 25 ? (breakline + msg) : msg;
   try {
     const response = await client.chat.sendFriendMessage(steamid, msg.replace(/({breakline})/g, breakline));
@@ -33,7 +33,7 @@ async function checkUsers() {
   for (let i = 0; i < keys.length; i++) {
     const UserID64 = keys[i];
     if (client.myFriends[UserID64] !== EFriendRelationship.Friend) continue; // user is not a friend type
-    if (config.admin.indexOf(UserID64) > -1) continue; // user is an admin
+    if (isAdmin(UserID64)) continue; // user is an admin
 
     if (!User.LastInteraction[UserID64]) { // somehow user doesn't not have an interact data
       User.LastInteraction[UserID64] = Now();
@@ -43,7 +43,7 @@ async function checkUsers() {
     if (moment().diff(User.LastInteraction[UserID64], 'days', true) >= config.maxDays) { // goodbye
       let response = `${breakline}Hey, it's been a while since you're have inactive, I'll unfriend you, but if you need anything, just add me again :)`;
       response += `${breakline}Hope i'll see you again, bye!`;
-      Message(UserID64, response);
+      sendChatMessage(UserID64, response);
       Log.Debug(`User #${UserID64} has have been inactive for a long time and has been removed from bot friendlist!`, false, config.DebugLogs);
       setTimeout(() => client.removeFriend(UserID64), 2500);
     }
@@ -100,14 +100,14 @@ async function sendAdminMessages(message) {
 
   for (let i = 0; i < config.admin.length; i++) {
     const Admin = config.admin[i];
-    await Message(Admin, message);
+    await sendChatMessage(Admin, message);
     await sleep(moment.duration(2, 'second'));
   }
 }
 
 module.exports = {
   Init,
-  Message,
+  sendChatMessage,
   sendAdminMessages,
   canComment,
   UserInteract: RegisterUserInteract,

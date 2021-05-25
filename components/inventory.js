@@ -141,8 +141,8 @@ Inventory.prototype.loadTF2Inventory = async function () {
 Inventory.prototype.return_CustomerTFKeys = async function (SteamID) {
   try {
     const { Contents } = await this.getUserInventoryContents(SteamID, 440, 2, true);
-    const Keys = Contents.filter((item) => item.market_hash_name.indexOf('Mann Co. Supply Crate Key') > -1);
-    return (Keys.map((item) => item.assetid));
+    const Keys = Contents.filter(({ market_hash_name: MarketHashName }) => MarketHashName.indexOf('Mann Co. Supply Crate Key') !== -1);
+    return Keys.map(({ assetid }) => assetid);
   } catch (err) {
     if (err.message.toLowerCase().indexOf('failure') === -1) return [];
     throw err;

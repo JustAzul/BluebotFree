@@ -45,7 +45,7 @@ module.exports = {
 
   // Enable or disable !sell features here
   enableSell: true,
-  // Enable or disable warning messages in admins steam chata ("hey i just have selled x sets for x keys")
+  // Enable or disable warning messages in admins steam chata ("hey i just have sold x sets for x keys")
   sellmsgs: true,
 
   // enable, or disable debug logs on console

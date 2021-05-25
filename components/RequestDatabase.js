@@ -12,7 +12,7 @@ async function RequestSteamSupply(Attempts = 1) {
     const { statusCode, body } = await got(`https://steam.supply/API/${SteamSupply.Api}/cardamount`);
 
     if (statusCode !== 200) throw new Error('Bad statusCode');
-    if (body.indexOf('you are not paid.') > -1 || body.indexOf('API key not found') > -1) throw new Error('bad');
+    if (body.indexOf('you are not paid.') !== -1 || body.indexOf('API key not found') !== -1) throw new Error('bad');
 
     return ParseDatabase(body);
   } catch (err) {

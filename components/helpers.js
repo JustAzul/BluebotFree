@@ -7,7 +7,7 @@ const {
 const { DataStructures } = require('@doctormckay/stdlib');
 const RequestDatabase = require('./RequestDatabase');
 const {
-  DebugLogs, sharedse, username, password,
+  DebugLogs, sharedse, username, password, admin: AdminList,
 } = require('../config/main');
 
 let CardDatabase = {};
@@ -142,11 +142,17 @@ function isSteamCommonError(ErrorMessage = '', LowerCase = false) {
   return false;
 }
 
+function isAdmin(SteamID64 = '') {
+  return AdminList.indexOf(SteamID64) !== -1;
+}
+
 module.exports = {
   Init,
 
   GenerateSteamGuardToken,
   getLogOn,
+
+  isAdmin,
 
   isSteamCommonError,
   ExpForLevel,

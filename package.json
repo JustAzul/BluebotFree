@@ -3,7 +3,7 @@
 	"version": "1.2.1",
 	"description": "Blue Cardsets/LevelUp BOT, Free edition.",
 	"main": "azul.js",
-	"author": "Azul|https://justazul.xyz",
+	"author": "Azul|https://justazul.com",
 	"dependencies": {
 		"@doctormckay/stdlib": "^1.14.0",
 		"azul-tools": "^1.9.15",

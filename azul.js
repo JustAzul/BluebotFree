@@ -387,18 +387,17 @@ async function check(CustomerID) {
     return;
   }
 
-  try {
-    const { Badges } = await inventory.getUserBadges(CustomerID, true, false);
-    let Qty = 0;
-    let keys = Object.keys(inventory.AvailableSets || {});
-    for (let i = 0; i < keys.length; i++) {
-      const AppID = keys[i];
-      if (Object.prototype.hasOwnProperty.call(Badges, AppID)) Qty -= Badges[AppID];
-      Qty += 5;
-    }
-    keys = null;
+  const o = {
+    Compare: true,
+    CollectorMode: false,
+    MaxSetsToSend: Number.MAX_SAFE_INTEGER,
+    parseArray: false,
+  };
 
-    if (Qty <= 0) {
+  try {
+    const { ParsedAmount: userCanCraft } = await inventory.getAvailableSetsForCustomer(CustomerID, o);
+
+    if (userCanCraft <= 0) {
       let response = msg.Donthave;
       if (inventory.HaveKeys() && config.enableSell) response += BR + msg.Sell_keys;
       UserHandler.sendChatMessage(CustomerID, response);
@@ -406,10 +405,10 @@ async function check(CustomerID) {
     }
 
     let response = msg.Check
-      .replace('{have_sets}', formatNumber(Qty))
-      .replace('{tf_price}', ((Qty / tfkeySets)).toFixed(1));
+      .replace('{have_sets}', formatNumber(userCanCraft))
+      .replace('{tf_price}', ((userCanCraft / tfkeySets)).toFixed(1));
 
-    response += msg.Check_i.replace('{buytf_qty}', parseInt(Qty / tfkeySets, 10));
+    response += msg.Check_i.replace('{buytf_qty}', parseInt(userCanCraft / tfkeySets, 10));
     UserHandler.sendChatMessage(CustomerID, response);
   } catch (err) {
     handleBadgeErrors(err, CustomerID);
@@ -437,7 +436,14 @@ async function Buy(CustomerID, KeysAmount = 0, Compare = true, CollectorMode = f
   const NeededBotSets = tfkeySets * KeysAmount;
 
   try {
-    const toSend = await inventory.getAvailableSetsForCustomer(CustomerID, Compare, CollectorMode, NeededBotSets);
+    const o = {
+      Compare,
+      CollectorMode,
+      MaxSetsToSend: NeededBotSets,
+      parseArray: true,
+    };
+
+    const { Result: toSend } = await inventory.getAvailableSetsForCustomer(CustomerID, o);
     if (toSend.length !== NeededBotSets) return UserHandler.sendChatMessage(CustomerID, msg.i_need.replace('{currency_qty}', toSend.length).replace('{currency}', 'sets').replace('{needed}', NeededBotSets));
 
     const toReceive = await inventory.getToOfferKeys(CustomerKeys.Assets, KeysAmount);
@@ -706,6 +712,8 @@ Client.chat.on('friendMessage', async ({ steamid_friend: source, server_timestam
           } else {
             UserHandler.sendChatMessage(source, `With ${InputValue} tf2 key(s) you'll get ${parseInt(InputValue, 10) * tfkeySets} set(s) but'll stay on level ${CustomerLevel}, interested? try !buy ${parseInt(InputValue, 10)}`);
           }
+
+          return;
         }
 
         check(source);

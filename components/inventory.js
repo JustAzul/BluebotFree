@@ -225,11 +225,27 @@ Inventory.prototype.getUserBadges = async function (SteamID, Compare = false, Co
 
   const Badges = {};
 
+  const isCardBadge = (Badge = {}) => {
+    const BadgeProperties = ['border_color', 'appid', 'level'];
+
+    for (let i = 0; i < BadgeProperties.length; i++) {
+      const PropertyName = BadgeProperties[i];
+      if (!Object.prototype.hasOwnProperty.call(Badge, PropertyName)) return false;
+    }
+
+    return true;
+  };
+
   for (let i = 0; i < badges.length; i++) {
-    const { appid, level, border_color: BorderColor } = badges[i];
-    if ((!BorderColor || BorderColor !== 0) || !appid) continue;
-    const canGet = CollectorMode ? (level ? 0 : 1) : (5 - level);
-    if (canGet > 0) Badges[appid] = canGet;
+    const Badge = badges[i];
+
+    if (!isCardBadge(Badge)) continue;
+    if (CollectorMode !== !!Badge.border_color) continue;
+
+    const MaxDefault = CollectorMode ? 1 : 5;
+    const canCraft = MaxDefault - Badge.level;
+
+    if (canCraft >= 0) Badges[Badge.appid] = canCraft;
   }
 
   const o = {
@@ -240,43 +256,64 @@ Inventory.prototype.getUserBadges = async function (SteamID, Compare = false, Co
   return o;
 };
 
-Inventory.prototype.getAvailableSetsForCustomer = async function (SteamID, Compare = true, CollectorMode = false, MaxSetsToSend = 5) {
-  const ParseSets = async (Badges = {}, MaxToParse = 5, perBadgeLimit = 0) => {
-    const ResultArray = [];
+Inventory.prototype.getAvailableSetsForCustomer = async function (SteamID, {
+  Compare = true, CollectorMode = false, MaxSetsToSend = 5, parseArray = true,
+}) {
+  const ParseSetsFromArray = (AppID, Amount = 0) => {
+    const ParsedArray = [];
 
-    const ParseSetsFromArray = async (AppID, Amount = 0) => {
-      const ParsedArray = [];
-
-      for (let i = 0; i < Amount; i++) {
-        const Sets = this.AvailableSets[AppID][i];
-        ParsedArray.push(...Sets);
-      }
-
-      return ParsedArray;
-    };
-
-    let keys = Object.keys(this.AvailableSets || {});
-    for (let i = 0; i < keys.length; i++) {
-      const AppID = keys[i];
-      let CanParse = Math.min(this.AvailableSets[AppID].length, perBadgeLimit);
-      if (Object.prototype.hasOwnProperty.call(Badges, AppID)) CanParse -= Badges[AppID];
-
-      if (CanParse <= 0) continue;
-      const Parsed = await ParseSetsFromArray(Math.min(CanParse, MaxToParse));
-
-      ResultArray.push(...Parsed);
-      MaxToParse -= CanParse;
-
-      if (MaxToParse === 0) break;
+    for (let i = 0; i < Amount; i++) {
+      const Sets = this.AvailableSets[AppID][i];
+      ParsedArray.push(...Sets);
     }
-    keys = null;
 
-    return ResultArray;
+    return ParsedArray;
   };
 
-  if (!Compare) return ParseSets({}, MaxSetsToSend, CollectorMode ? 1 : 5);
-  const { Badges } = await this.getUserBadges(SteamID, true, CollectorMode);
-  return ParseSets(Badges, MaxSetsToSend, CollectorMode ? 1 : 5);
+  const ParseSets = async ({ Badges = {} }, TotalSetstoParse = 5, perBadgeLimit = 5) => {
+    const ResultArray = [];
+    let ParsedAmount = 0;
+
+    {
+      let keys = Object.keys(this.AvailableSets || {});
+      for (let i = 0; i < keys.length; i++) {
+        if (ParsedAmount > TotalSetstoParse) {
+          throw new Error(`Wrong ParsedAmount value: ${ParsedAmount}, Expected: ${TotalSetstoParse} or lower.`);
+        }
+
+        const AppID = keys[i];
+
+        const BotCanParse = Math.min(this.AvailableSets[AppID].length, perBadgeLimit);
+        const userCanCraft = Object.prototype.hasOwnProperty.call(Badges, AppID)
+          ? Math.min(Badges[AppID], BotCanParse)
+          : BotCanParse;
+
+        const BotShouldParse = Math.min(userCanCraft, (TotalSetstoParse - ParsedAmount));
+
+        if (ParsedAmount === TotalSetstoParse) break;
+        if (userCanCraft <= 0) continue;
+
+        if (parseArray) {
+          const Parsed = ParseSetsFromArray(AppID, BotShouldParse);
+          ResultArray.push(...Parsed);
+        }
+
+        ParsedAmount += BotShouldParse;
+      }
+      keys = null;
+    }
+
+    return {
+      Result: ResultArray,
+      ParsedAmount,
+    };
+  };
+
+  const BadgeData = Compare
+    ? await this.getUserBadges(SteamID, true, CollectorMode)
+    : {};
+
+  return ParseSets(BadgeData, MaxSetsToSend, CollectorMode ? 1 : 5);
 };
 
 Inventory.prototype.getUserInventoryContents = function () {

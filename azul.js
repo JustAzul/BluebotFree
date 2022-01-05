@@ -580,9 +580,9 @@ function dev(CustomerId) {
   let Response = 'This bot was developed by Azul.';
   Response += '{breakline}- If you want anything like code service, please contact me so we can chat :)';
   Response += '{breakline}• [Steam] - https://steamcommunity.com/profiles/76561198177999769';
-  Response += '{breakline}• [Github] - http://git.justazul.xyz';
-  Response += '{breakline}• [Discord] - http://discord.justazul.xyz';
-  Response += '{breakline}• [Reddit] - http://reddit.justazul.xyz';
+  Response += '{breakline}• [Github] - http://git.justazul.com';
+  Response += '{breakline}• [Discord] - http://discord.justazul.com';
+  Response += '{breakline}• [Reddit] - http://reddit.justazul.com';
   return Response;
 }
 

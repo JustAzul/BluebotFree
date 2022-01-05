@@ -687,7 +687,7 @@ Client.chat.on('friendMessage', async ({ steamid_friend: source, server_timestam
       developer: () => UserHandler.sendChatMessage(source, dev(source)),
       stats: () => stats(SouceID64),
       check: async () => {
-        const HasInputs = (m.split(' ') || []).length > 0;
+        const HasInputs = /(\s)/g.test(m);
 
         if (HasInputs) {
           let InputValue;

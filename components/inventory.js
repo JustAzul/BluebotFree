@@ -240,7 +240,7 @@ Inventory.prototype.getUserBadges = async function (SteamID, Compare = false, Co
     const Badge = badges[i];
 
     if (!isCardBadge(Badge)) continue;
-    if (CollectorMode !== !!Badge.border_color) continue;
+    if (Badge.border_color !== 0) continue;
 
     const MaxDefault = CollectorMode ? 1 : 5;
     const canCraft = MaxDefault - Badge.level;

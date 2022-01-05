@@ -29,9 +29,9 @@ module.exports = {
   },
 
   // Desired comment you want the bot to make in customers profile, change to "null" witout quotes to disable this feature
-  ThanksM: '+Rep!, Please visit https://github.com/JustAzul/BluebotFree <-|-> https://justazul.xyz!',
+  ThanksM: '+Rep!, Please visit https://github.com/JustAzul/BluebotFree <-|-> https://justazul.com!',
   // If you want to change bot name on startups, set the value name here, change to "null" witout quotes to disable this feature
-  changeBotName: 'justazul.xyz Free LevelUP #Bot {rate}',
+  changeBotName: 'justazul.com Free LevelUP #Bot {rate}',
 
   // Max sets amount of any appid bot will accept in your inventory, if bot rearch this limit, wont buy more sets of this appid
   maxStock: 100,

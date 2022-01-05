@@ -800,7 +800,7 @@ Client.chat.on('friendMessage', async ({ steamid_friend: source, server_timestam
       },
       profits: () => TradingCounts(source),
       shutdown: () => {
-        UserHandler.sendChatMessage(source, 'I going down :(');
+        UserHandler.sendChatMessage(source, 'I\'m going down :(');
         ShutdownApp();
       },
       restart: () => {

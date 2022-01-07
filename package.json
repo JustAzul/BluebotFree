@@ -12,7 +12,7 @@
 		"graceful-fs": "^4.2.6",
 		"moment": "^2.22.1",
 		"steam-totp": "^2.1.1",
-		"steam-tradeoffer-manager": "2.10.3",
+		"steam-tradeoffer-manager": "2.10.4",
 		"steam-user": "^4.19.4",
 		"steamcommunity": "^3.36.1"
 	},
